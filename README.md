@@ -1,82 +1,28 @@
-# 🕌 Namaz Time
-A modern web application that displays Islamic prayer times with a clean and responsive interface.
-**Live Demo:**
-https://amirback.github.io/Namaz-time/
-## 📖 About
-Namaz Time is a lightweight web application designed to display daily Islamic prayer times in a simple and user-friendly interface.
-## ✨ Features
-* 🕌 Daily prayer times
-* 📱 Responsive design
-* ⚡ Fast and lightweight
-* 🎨 Clean modern interface
-* 🌙 Easy to use
+# 🌴 Намаз сағаты — Солнечные часы намаза
 
-## 🛠️ Built With
-* HTML5
-* CSS3
-* JavaScript (Vanilla)
+Интерактивные 3D солнечные часы для определения времени намаза по тени пальмы.
 
-## 🚀 Installation
-Clone the repository:
+**[🌐 Открыть сайт](https://amirback.github.io/Namaz-time/)**
 
-```bash
-git clone https://github.com/amirback/Namaz-time.git
-```
+## Возможности
 
-Open the project folder and launch **index.html** in your browser.
-## 📂 Project Structure
+- **5 намазов** отображены на песке по тени пальмы (Фаджр, Зухр, Аср, Магриб, Иша)
+- **Реальная погода** — подключается к API и показывает актуальную погоду вашего города: дождь, гроза, пасмурность
+- **Дождь и молнии** — во время грозы сверкают молнии, идёт дождь, песок темнеет
+- **Океан вокруг острова** с живыми волнами
+- **Луна и звёзды** — ночью в небе появляется луна, звёзды отражаются в воде
+- **Облака** — дрейфуют по небу при пасмурной погоде
+- **47+ городов** — Казахстан, Узбекистан, Турция, ОАЭ, Саудовская Аравия, Египет, Пакистан и другие
+- **Точный астрономический расчёт** (NOAA) времени намаза
+- **Анимация дня** — запустите весь день за 24 секунды и наблюдайте движение тени
 
-```
-Namaz-time/
-├── index.html
-└── README.md
-```
+## Использование
 
-## 🔮 Future Improvements
-* Automatic location detection
-* Multiple prayer calculation methods
-* Hijri calendar
-* Dark mode
-* Prayer notifications
-* Progressive Web App (PWA)
+Откройте сайт → выберите город → время намазов рассчитывается автоматически.  
+Тяните мышью — поворот сцены, колесо — зум. На телефоне: один палец — поворот, два — зум.
 
-GitHub: https://github.com/amirback
+## Технологии
 
-## 📖 О проекте
-Namaz Time — это современное веб-приложение для отображения времени намаза с простым, удобным и адаптивным интерфейсом.
-
-## ✨ Возможности
-* 🕌 Отображение времени намаза
-* 📱 Адаптивный дизайн
-* ⚡ Быстрая работа
-* 🎨 Современный минималистичный интерфейс
-* 🌙 Удобство использования
-
-## 🛠️ Используемые технологии
-* HTML5
-* CSS3
-* JavaScript (Vanilla)
-
-## 🚀 Запуск проекта
-Склонируйте репозиторий:
-
-```bash
-git clone https://github.com/amirback/Namaz-time.git
-```
-
-После этого откройте файл **index.html** в браузере.
-## 🔮 Планы по развитию
-* Автоматическое определение местоположения
-* Несколько методов расчета времени намаза
-* Хиджрийский календарь
-* Темная тема
-* Уведомления перед намазом
-* Поддержка PWA
-
-GitHub: https://github.com/amirback
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License.
+- **Three.js r128** — 3D графика
+- **NOAA Solar Calculator** — астрономические расчёты
+- **Open-Meteo API** — реальная погода (бесплатно, без ключа)
