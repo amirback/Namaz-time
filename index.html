@@ -543,6 +543,1071 @@
 } )();
 
 </script>
+<script>/* CopyShader.js */
+( function () {
+
+	/**
+ * Full-screen textured quad shader
+ */
+	var CopyShader = {
+		uniforms: {
+			'tDiffuse': {
+				value: null
+			},
+			'opacity': {
+				value: 1.0
+			}
+		},
+		vertexShader:
+  /* glsl */
+  `
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vUv = uv;
+			gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+		}`,
+		fragmentShader:
+  /* glsl */
+  `
+
+		uniform float opacity;
+
+		uniform sampler2D tDiffuse;
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vec4 texel = texture2D( tDiffuse, vUv );
+			gl_FragColor = opacity * texel;
+
+		}`
+	};
+
+	THREE.CopyShader = CopyShader;
+
+} )();
+
+</script>
+<script>/* LuminosityHighPassShader.js */
+( function () {
+
+	/**
+ * Luminosity
+ * http://en.wikipedia.org/wiki/Luminosity
+ */
+
+	const LuminosityHighPassShader = {
+		shaderID: 'luminosityHighPass',
+		uniforms: {
+			'tDiffuse': {
+				value: null
+			},
+			'luminosityThreshold': {
+				value: 1.0
+			},
+			'smoothWidth': {
+				value: 1.0
+			},
+			'defaultColor': {
+				value: new THREE.Color( 0x000000 )
+			},
+			'defaultOpacity': {
+				value: 0.0
+			}
+		},
+		vertexShader:
+  /* glsl */
+  `
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vUv = uv;
+
+			gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+		}`,
+		fragmentShader:
+  /* glsl */
+  `
+
+		uniform sampler2D tDiffuse;
+		uniform vec3 defaultColor;
+		uniform float defaultOpacity;
+		uniform float luminosityThreshold;
+		uniform float smoothWidth;
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vec4 texel = texture2D( tDiffuse, vUv );
+
+			vec3 luma = vec3( 0.299, 0.587, 0.114 );
+
+			float v = dot( texel.xyz, luma );
+
+			vec4 outputColor = vec4( defaultColor.rgb, defaultOpacity );
+
+			float alpha = smoothstep( luminosityThreshold, luminosityThreshold + smoothWidth, v );
+
+			gl_FragColor = mix( outputColor, texel, alpha );
+
+		}`
+	};
+
+	THREE.LuminosityHighPassShader = LuminosityHighPassShader;
+
+} )();
+
+</script>
+<script>/* GammaCorrectionShader.js */
+( function () {
+
+	/**
+ * Gamma Correction Shader
+ * http://en.wikipedia.org/wiki/gamma_correction
+ */
+	const GammaCorrectionShader = {
+		uniforms: {
+			'tDiffuse': {
+				value: null
+			}
+		},
+		vertexShader:
+  /* glsl */
+  `
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vUv = uv;
+			gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+		}`,
+		fragmentShader:
+  /* glsl */
+  `
+
+		uniform sampler2D tDiffuse;
+
+		varying vec2 vUv;
+
+		void main() {
+
+			vec4 tex = texture2D( tDiffuse, vUv );
+
+			gl_FragColor = LinearTosRGB( tex ); // optional: LinearToGamma( tex, float( GAMMA_FACTOR ) );
+
+		}`
+	};
+
+	THREE.GammaCorrectionShader = GammaCorrectionShader;
+
+} )();
+
+</script>
+<script>/* EffectComposer.js */
+( function () {
+
+	class EffectComposer {
+
+		constructor( renderer, renderTarget ) {
+
+			this.renderer = renderer;
+
+			if ( renderTarget === undefined ) {
+
+				const parameters = {
+					minFilter: THREE.LinearFilter,
+					magFilter: THREE.LinearFilter,
+					format: THREE.RGBAFormat
+				};
+				const size = renderer.getSize( new THREE.Vector2() );
+				this._pixelRatio = renderer.getPixelRatio();
+				this._width = size.width;
+				this._height = size.height;
+				renderTarget = new THREE.WebGLRenderTarget( this._width * this._pixelRatio, this._height * this._pixelRatio, parameters );
+				renderTarget.texture.name = 'EffectComposer.rt1';
+
+			} else {
+
+				this._pixelRatio = 1;
+				this._width = renderTarget.width;
+				this._height = renderTarget.height;
+
+			}
+
+			this.renderTarget1 = renderTarget;
+			this.renderTarget2 = renderTarget.clone();
+			this.renderTarget2.texture.name = 'EffectComposer.rt2';
+			this.writeBuffer = this.renderTarget1;
+			this.readBuffer = this.renderTarget2;
+			this.renderToScreen = true;
+			this.passes = []; // dependencies
+
+			if ( THREE.CopyShader === undefined ) {
+
+				console.error( 'THREE.EffectComposer relies on THREE.CopyShader' );
+
+			}
+
+			if ( THREE.ShaderPass === undefined ) {
+
+				console.error( 'THREE.EffectComposer relies on THREE.ShaderPass' );
+
+			}
+
+			this.copyPass = new THREE.ShaderPass( THREE.CopyShader );
+			this.clock = new THREE.Clock();
+
+		}
+
+		swapBuffers() {
+
+			const tmp = this.readBuffer;
+			this.readBuffer = this.writeBuffer;
+			this.writeBuffer = tmp;
+
+		}
+
+		addPass( pass ) {
+
+			this.passes.push( pass );
+			pass.setSize( this._width * this._pixelRatio, this._height * this._pixelRatio );
+
+		}
+
+		insertPass( pass, index ) {
+
+			this.passes.splice( index, 0, pass );
+			pass.setSize( this._width * this._pixelRatio, this._height * this._pixelRatio );
+
+		}
+
+		removePass( pass ) {
+
+			const index = this.passes.indexOf( pass );
+
+			if ( index !== - 1 ) {
+
+				this.passes.splice( index, 1 );
+
+			}
+
+		}
+
+		isLastEnabledPass( passIndex ) {
+
+			for ( let i = passIndex + 1; i < this.passes.length; i ++ ) {
+
+				if ( this.passes[ i ].enabled ) {
+
+					return false;
+
+				}
+
+			}
+
+			return true;
+
+		}
+
+		render( deltaTime ) {
+
+			// deltaTime value is in seconds
+			if ( deltaTime === undefined ) {
+
+				deltaTime = this.clock.getDelta();
+
+			}
+
+			const currentRenderTarget = this.renderer.getRenderTarget();
+			let maskActive = false;
+
+			for ( let i = 0, il = this.passes.length; i < il; i ++ ) {
+
+				const pass = this.passes[ i ];
+				if ( pass.enabled === false ) continue;
+				pass.renderToScreen = this.renderToScreen && this.isLastEnabledPass( i );
+				pass.render( this.renderer, this.writeBuffer, this.readBuffer, deltaTime, maskActive );
+
+				if ( pass.needsSwap ) {
+
+					if ( maskActive ) {
+
+						const context = this.renderer.getContext();
+						const stencil = this.renderer.state.buffers.stencil; //context.stencilFunc( context.NOTEQUAL, 1, 0xffffffff );
+
+						stencil.setFunc( context.NOTEQUAL, 1, 0xffffffff );
+						this.copyPass.render( this.renderer, this.writeBuffer, this.readBuffer, deltaTime ); //context.stencilFunc( context.EQUAL, 1, 0xffffffff );
+
+						stencil.setFunc( context.EQUAL, 1, 0xffffffff );
+
+					}
+
+					this.swapBuffers();
+
+				}
+
+				if ( THREE.MaskPass !== undefined ) {
+
+					if ( pass instanceof THREE.MaskPass ) {
+
+						maskActive = true;
+
+					} else if ( pass instanceof THREE.ClearMaskPass ) {
+
+						maskActive = false;
+
+					}
+
+				}
+
+			}
+
+			this.renderer.setRenderTarget( currentRenderTarget );
+
+		}
+
+		reset( renderTarget ) {
+
+			if ( renderTarget === undefined ) {
+
+				const size = this.renderer.getSize( new THREE.Vector2() );
+				this._pixelRatio = this.renderer.getPixelRatio();
+				this._width = size.width;
+				this._height = size.height;
+				renderTarget = this.renderTarget1.clone();
+				renderTarget.setSize( this._width * this._pixelRatio, this._height * this._pixelRatio );
+
+			}
+
+			this.renderTarget1.dispose();
+			this.renderTarget2.dispose();
+			this.renderTarget1 = renderTarget;
+			this.renderTarget2 = renderTarget.clone();
+			this.writeBuffer = this.renderTarget1;
+			this.readBuffer = this.renderTarget2;
+
+		}
+
+		setSize( width, height ) {
+
+			this._width = width;
+			this._height = height;
+			const effectiveWidth = this._width * this._pixelRatio;
+			const effectiveHeight = this._height * this._pixelRatio;
+			this.renderTarget1.setSize( effectiveWidth, effectiveHeight );
+			this.renderTarget2.setSize( effectiveWidth, effectiveHeight );
+
+			for ( let i = 0; i < this.passes.length; i ++ ) {
+
+				this.passes[ i ].setSize( effectiveWidth, effectiveHeight );
+
+			}
+
+		}
+
+		setPixelRatio( pixelRatio ) {
+
+			this._pixelRatio = pixelRatio;
+			this.setSize( this._width, this._height );
+
+		}
+
+	}
+
+	class Pass {
+
+		constructor() {
+
+			// if set to true, the pass is processed by the composer
+			this.enabled = true; // if set to true, the pass indicates to swap read and write buffer after rendering
+
+			this.needsSwap = true; // if set to true, the pass clears its buffer before rendering
+
+			this.clear = false; // if set to true, the result of the pass is rendered to screen. This is set automatically by EffectComposer.
+
+			this.renderToScreen = false;
+
+		}
+
+		setSize( ) {}
+
+		render( ) {
+
+			console.error( 'THREE.Pass: .render() must be implemented in derived pass.' );
+
+		}
+
+	} // Helper for passes that need to fill the viewport with a single quad.
+
+
+	const _camera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, 0, 1 ); // https://github.com/mrdoob/three.js/pull/21358
+
+
+	const _geometry = new THREE.BufferGeometry();
+
+	_geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [ - 1, 3, 0, - 1, - 1, 0, 3, - 1, 0 ], 3 ) );
+
+	_geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( [ 0, 2, 0, 0, 2, 0 ], 2 ) );
+
+	class FullScreenQuad {
+
+		constructor( material ) {
+
+			this._mesh = new THREE.Mesh( _geometry, material );
+
+		}
+
+		dispose() {
+
+			this._mesh.geometry.dispose();
+
+		}
+
+		render( renderer ) {
+
+			renderer.render( this._mesh, _camera );
+
+		}
+
+		get material() {
+
+			return this._mesh.material;
+
+		}
+
+		set material( value ) {
+
+			this._mesh.material = value;
+
+		}
+
+	}
+
+	THREE.EffectComposer = EffectComposer;
+	THREE.FullScreenQuad = FullScreenQuad;
+	THREE.Pass = Pass;
+
+} )();
+
+</script>
+<script>/* MaskPass.js */
+( function () {
+
+	class MaskPass extends THREE.Pass {
+
+		constructor( scene, camera ) {
+
+			super();
+			this.scene = scene;
+			this.camera = camera;
+			this.clear = true;
+			this.needsSwap = false;
+			this.inverse = false;
+
+		}
+
+		render( renderer, writeBuffer, readBuffer
+			/*, deltaTime, maskActive */
+		) {
+
+			const context = renderer.getContext();
+			const state = renderer.state; // don't update color or depth
+
+			state.buffers.color.setMask( false );
+			state.buffers.depth.setMask( false ); // lock buffers
+
+			state.buffers.color.setLocked( true );
+			state.buffers.depth.setLocked( true ); // set up stencil
+
+			let writeValue, clearValue;
+
+			if ( this.inverse ) {
+
+				writeValue = 0;
+				clearValue = 1;
+
+			} else {
+
+				writeValue = 1;
+				clearValue = 0;
+
+			}
+
+			state.buffers.stencil.setTest( true );
+			state.buffers.stencil.setOp( context.REPLACE, context.REPLACE, context.REPLACE );
+			state.buffers.stencil.setFunc( context.ALWAYS, writeValue, 0xffffffff );
+			state.buffers.stencil.setClear( clearValue );
+			state.buffers.stencil.setLocked( true ); // draw into the stencil buffer
+
+			renderer.setRenderTarget( readBuffer );
+			if ( this.clear ) renderer.clear();
+			renderer.render( this.scene, this.camera );
+			renderer.setRenderTarget( writeBuffer );
+			if ( this.clear ) renderer.clear();
+			renderer.render( this.scene, this.camera ); // unlock color and depth buffer for subsequent rendering
+
+			state.buffers.color.setLocked( false );
+			state.buffers.depth.setLocked( false ); // only render where stencil is set to 1
+
+			state.buffers.stencil.setLocked( false );
+			state.buffers.stencil.setFunc( context.EQUAL, 1, 0xffffffff ); // draw if == 1
+
+			state.buffers.stencil.setOp( context.KEEP, context.KEEP, context.KEEP );
+			state.buffers.stencil.setLocked( true );
+
+		}
+
+	}
+
+	class ClearMaskPass extends THREE.Pass {
+
+		constructor() {
+
+			super();
+			this.needsSwap = false;
+
+		}
+
+		render( renderer
+			/*, writeBuffer, readBuffer, deltaTime, maskActive */
+		) {
+
+			renderer.state.buffers.stencil.setLocked( false );
+			renderer.state.buffers.stencil.setTest( false );
+
+		}
+
+	}
+
+	THREE.ClearMaskPass = ClearMaskPass;
+	THREE.MaskPass = MaskPass;
+
+} )();
+
+</script>
+<script>/* RenderPass.js */
+( function () {
+
+	class RenderPass extends THREE.Pass {
+
+		constructor( scene, camera, overrideMaterial, clearColor, clearAlpha ) {
+
+			super();
+			this.scene = scene;
+			this.camera = camera;
+			this.overrideMaterial = overrideMaterial;
+			this.clearColor = clearColor;
+			this.clearAlpha = clearAlpha !== undefined ? clearAlpha : 0;
+			this.clear = true;
+			this.clearDepth = false;
+			this.needsSwap = false;
+			this._oldClearColor = new THREE.Color();
+
+		}
+
+		render( renderer, writeBuffer, readBuffer
+			/*, deltaTime, maskActive */
+		) {
+
+			const oldAutoClear = renderer.autoClear;
+			renderer.autoClear = false;
+			let oldClearAlpha, oldOverrideMaterial;
+
+			if ( this.overrideMaterial !== undefined ) {
+
+				oldOverrideMaterial = this.scene.overrideMaterial;
+				this.scene.overrideMaterial = this.overrideMaterial;
+
+			}
+
+			if ( this.clearColor ) {
+
+				renderer.getClearColor( this._oldClearColor );
+				oldClearAlpha = renderer.getClearAlpha();
+				renderer.setClearColor( this.clearColor, this.clearAlpha );
+
+			}
+
+			if ( this.clearDepth ) {
+
+				renderer.clearDepth();
+
+			}
+
+			renderer.setRenderTarget( this.renderToScreen ? null : readBuffer ); // TODO: Avoid using autoClear properties, see https://github.com/mrdoob/three.js/pull/15571#issuecomment-465669600
+
+			if ( this.clear ) renderer.clear( renderer.autoClearColor, renderer.autoClearDepth, renderer.autoClearStencil );
+			renderer.render( this.scene, this.camera );
+
+			if ( this.clearColor ) {
+
+				renderer.setClearColor( this._oldClearColor, oldClearAlpha );
+
+			}
+
+			if ( this.overrideMaterial !== undefined ) {
+
+				this.scene.overrideMaterial = oldOverrideMaterial;
+
+			}
+
+			renderer.autoClear = oldAutoClear;
+
+		}
+
+	}
+
+	THREE.RenderPass = RenderPass;
+
+} )();
+
+</script>
+<script>/* ShaderPass.js */
+( function () {
+
+	class ShaderPass extends THREE.Pass {
+
+		constructor( shader, textureID ) {
+
+			super();
+			this.textureID = textureID !== undefined ? textureID : 'tDiffuse';
+
+			if ( shader instanceof THREE.ShaderMaterial ) {
+
+				this.uniforms = shader.uniforms;
+				this.material = shader;
+
+			} else if ( shader ) {
+
+				this.uniforms = THREE.UniformsUtils.clone( shader.uniforms );
+				this.material = new THREE.ShaderMaterial( {
+					defines: Object.assign( {}, shader.defines ),
+					uniforms: this.uniforms,
+					vertexShader: shader.vertexShader,
+					fragmentShader: shader.fragmentShader
+				} );
+
+			}
+
+			this.fsQuad = new THREE.FullScreenQuad( this.material );
+
+		}
+
+		render( renderer, writeBuffer, readBuffer
+			/*, deltaTime, maskActive */
+		) {
+
+			if ( this.uniforms[ this.textureID ] ) {
+
+				this.uniforms[ this.textureID ].value = readBuffer.texture;
+
+			}
+
+			this.fsQuad.material = this.material;
+
+			if ( this.renderToScreen ) {
+
+				renderer.setRenderTarget( null );
+				this.fsQuad.render( renderer );
+
+			} else {
+
+				renderer.setRenderTarget( writeBuffer ); // TODO: Avoid using autoClear properties, see https://github.com/mrdoob/three.js/pull/15571#issuecomment-465669600
+
+				if ( this.clear ) renderer.clear( renderer.autoClearColor, renderer.autoClearDepth, renderer.autoClearStencil );
+				this.fsQuad.render( renderer );
+
+			}
+
+		}
+
+	}
+
+	THREE.ShaderPass = ShaderPass;
+
+} )();
+
+</script>
+<script>/* UnrealBloomPass.js */
+( function () {
+
+	/**
+ * UnrealBloomPass is inspired by the bloom pass of Unreal Engine. It creates a
+ * mip map chain of bloom textures and blurs them with different radii. Because
+ * of the weighted combination of mips, and because larger blurs are done on
+ * higher mips, this effect provides good quality and performance.
+ *
+ * Reference:
+ * - https://docs.unrealengine.com/latest/INT/Engine/Rendering/PostProcessEffects/Bloom/
+ */
+
+	class UnrealBloomPass extends THREE.Pass {
+
+		constructor( resolution, strength, radius, threshold ) {
+
+			super();
+			this.strength = strength !== undefined ? strength : 1;
+			this.radius = radius;
+			this.threshold = threshold;
+			this.resolution = resolution !== undefined ? new THREE.Vector2( resolution.x, resolution.y ) : new THREE.Vector2( 256, 256 ); // create color only once here, reuse it later inside the render function
+
+			this.clearColor = new THREE.Color( 0, 0, 0 ); // render targets
+
+			const pars = {
+				minFilter: THREE.LinearFilter,
+				magFilter: THREE.LinearFilter,
+				format: THREE.RGBAFormat
+			};
+			this.renderTargetsHorizontal = [];
+			this.renderTargetsVertical = [];
+			this.nMips = 5;
+			let resx = Math.round( this.resolution.x / 2 );
+			let resy = Math.round( this.resolution.y / 2 );
+			this.renderTargetBright = new THREE.WebGLRenderTarget( resx, resy, pars );
+			this.renderTargetBright.texture.name = 'UnrealBloomPass.bright';
+			this.renderTargetBright.texture.generateMipmaps = false;
+
+			for ( let i = 0; i < this.nMips; i ++ ) {
+
+				const renderTargetHorizonal = new THREE.WebGLRenderTarget( resx, resy, pars );
+				renderTargetHorizonal.texture.name = 'UnrealBloomPass.h' + i;
+				renderTargetHorizonal.texture.generateMipmaps = false;
+				this.renderTargetsHorizontal.push( renderTargetHorizonal );
+				const renderTargetVertical = new THREE.WebGLRenderTarget( resx, resy, pars );
+				renderTargetVertical.texture.name = 'UnrealBloomPass.v' + i;
+				renderTargetVertical.texture.generateMipmaps = false;
+				this.renderTargetsVertical.push( renderTargetVertical );
+				resx = Math.round( resx / 2 );
+				resy = Math.round( resy / 2 );
+
+			} // luminosity high pass material
+
+
+			if ( THREE.LuminosityHighPassShader === undefined ) console.error( 'THREE.UnrealBloomPass relies on THREE.LuminosityHighPassShader' );
+			const highPassShader = THREE.LuminosityHighPassShader;
+			this.highPassUniforms = THREE.UniformsUtils.clone( highPassShader.uniforms );
+			this.highPassUniforms[ 'luminosityThreshold' ].value = threshold;
+			this.highPassUniforms[ 'smoothWidth' ].value = 0.01;
+			this.materialHighPassFilter = new THREE.ShaderMaterial( {
+				uniforms: this.highPassUniforms,
+				vertexShader: highPassShader.vertexShader,
+				fragmentShader: highPassShader.fragmentShader,
+				defines: {}
+			} ); // Gaussian Blur Materials
+
+			this.separableBlurMaterials = [];
+			const kernelSizeArray = [ 3, 5, 7, 9, 11 ];
+			resx = Math.round( this.resolution.x / 2 );
+			resy = Math.round( this.resolution.y / 2 );
+
+			for ( let i = 0; i < this.nMips; i ++ ) {
+
+				this.separableBlurMaterials.push( this.getSeperableBlurMaterial( kernelSizeArray[ i ] ) );
+				this.separableBlurMaterials[ i ].uniforms[ 'texSize' ].value = new THREE.Vector2( resx, resy );
+				resx = Math.round( resx / 2 );
+				resy = Math.round( resy / 2 );
+
+			} // Composite material
+
+
+			this.compositeMaterial = this.getCompositeMaterial( this.nMips );
+			this.compositeMaterial.uniforms[ 'blurTexture1' ].value = this.renderTargetsVertical[ 0 ].texture;
+			this.compositeMaterial.uniforms[ 'blurTexture2' ].value = this.renderTargetsVertical[ 1 ].texture;
+			this.compositeMaterial.uniforms[ 'blurTexture3' ].value = this.renderTargetsVertical[ 2 ].texture;
+			this.compositeMaterial.uniforms[ 'blurTexture4' ].value = this.renderTargetsVertical[ 3 ].texture;
+			this.compositeMaterial.uniforms[ 'blurTexture5' ].value = this.renderTargetsVertical[ 4 ].texture;
+			this.compositeMaterial.uniforms[ 'bloomStrength' ].value = strength;
+			this.compositeMaterial.uniforms[ 'bloomRadius' ].value = 0.1;
+			this.compositeMaterial.needsUpdate = true;
+			const bloomFactors = [ 1.0, 0.8, 0.6, 0.4, 0.2 ];
+			this.compositeMaterial.uniforms[ 'bloomFactors' ].value = bloomFactors;
+			this.bloomTintColors = [ new THREE.Vector3( 1, 1, 1 ), new THREE.Vector3( 1, 1, 1 ), new THREE.Vector3( 1, 1, 1 ), new THREE.Vector3( 1, 1, 1 ), new THREE.Vector3( 1, 1, 1 ) ];
+			this.compositeMaterial.uniforms[ 'bloomTintColors' ].value = this.bloomTintColors; // copy material
+
+			if ( THREE.CopyShader === undefined ) {
+
+				console.error( 'THREE.UnrealBloomPass relies on THREE.CopyShader' );
+
+			}
+
+			const copyShader = THREE.CopyShader;
+			this.copyUniforms = THREE.UniformsUtils.clone( copyShader.uniforms );
+			this.copyUniforms[ 'opacity' ].value = 1.0;
+			this.materialCopy = new THREE.ShaderMaterial( {
+				uniforms: this.copyUniforms,
+				vertexShader: copyShader.vertexShader,
+				fragmentShader: copyShader.fragmentShader,
+				blending: THREE.AdditiveBlending,
+				depthTest: false,
+				depthWrite: false,
+				transparent: true
+			} );
+			this.enabled = true;
+			this.needsSwap = false;
+			this._oldClearColor = new THREE.Color();
+			this.oldClearAlpha = 1;
+			this.basic = new THREE.MeshBasicMaterial();
+			this.fsQuad = new THREE.FullScreenQuad( null );
+
+		}
+
+		dispose() {
+
+			for ( let i = 0; i < this.renderTargetsHorizontal.length; i ++ ) {
+
+				this.renderTargetsHorizontal[ i ].dispose();
+
+			}
+
+			for ( let i = 0; i < this.renderTargetsVertical.length; i ++ ) {
+
+				this.renderTargetsVertical[ i ].dispose();
+
+			}
+
+			this.renderTargetBright.dispose();
+
+		}
+
+		setSize( width, height ) {
+
+			let resx = Math.round( width / 2 );
+			let resy = Math.round( height / 2 );
+			this.renderTargetBright.setSize( resx, resy );
+
+			for ( let i = 0; i < this.nMips; i ++ ) {
+
+				this.renderTargetsHorizontal[ i ].setSize( resx, resy );
+				this.renderTargetsVertical[ i ].setSize( resx, resy );
+				this.separableBlurMaterials[ i ].uniforms[ 'texSize' ].value = new THREE.Vector2( resx, resy );
+				resx = Math.round( resx / 2 );
+				resy = Math.round( resy / 2 );
+
+			}
+
+		}
+
+		render( renderer, writeBuffer, readBuffer, deltaTime, maskActive ) {
+
+			renderer.getClearColor( this._oldClearColor );
+			this.oldClearAlpha = renderer.getClearAlpha();
+			const oldAutoClear = renderer.autoClear;
+			renderer.autoClear = false;
+			renderer.setClearColor( this.clearColor, 0 );
+			if ( maskActive ) renderer.state.buffers.stencil.setTest( false ); // Render input to screen
+
+			if ( this.renderToScreen ) {
+
+				this.fsQuad.material = this.basic;
+				this.basic.map = readBuffer.texture;
+				renderer.setRenderTarget( null );
+				renderer.clear();
+				this.fsQuad.render( renderer );
+
+			} // 1. Extract Bright Areas
+
+
+			this.highPassUniforms[ 'tDiffuse' ].value = readBuffer.texture;
+			this.highPassUniforms[ 'luminosityThreshold' ].value = this.threshold;
+			this.fsQuad.material = this.materialHighPassFilter;
+			renderer.setRenderTarget( this.renderTargetBright );
+			renderer.clear();
+			this.fsQuad.render( renderer ); // 2. Blur All the mips progressively
+
+			let inputRenderTarget = this.renderTargetBright;
+
+			for ( let i = 0; i < this.nMips; i ++ ) {
+
+				this.fsQuad.material = this.separableBlurMaterials[ i ];
+				this.separableBlurMaterials[ i ].uniforms[ 'colorTexture' ].value = inputRenderTarget.texture;
+				this.separableBlurMaterials[ i ].uniforms[ 'direction' ].value = UnrealBloomPass.BlurDirectionX;
+				renderer.setRenderTarget( this.renderTargetsHorizontal[ i ] );
+				renderer.clear();
+				this.fsQuad.render( renderer );
+				this.separableBlurMaterials[ i ].uniforms[ 'colorTexture' ].value = this.renderTargetsHorizontal[ i ].texture;
+				this.separableBlurMaterials[ i ].uniforms[ 'direction' ].value = UnrealBloomPass.BlurDirectionY;
+				renderer.setRenderTarget( this.renderTargetsVertical[ i ] );
+				renderer.clear();
+				this.fsQuad.render( renderer );
+				inputRenderTarget = this.renderTargetsVertical[ i ];
+
+			} // Composite All the mips
+
+
+			this.fsQuad.material = this.compositeMaterial;
+			this.compositeMaterial.uniforms[ 'bloomStrength' ].value = this.strength;
+			this.compositeMaterial.uniforms[ 'bloomRadius' ].value = this.radius;
+			this.compositeMaterial.uniforms[ 'bloomTintColors' ].value = this.bloomTintColors;
+			renderer.setRenderTarget( this.renderTargetsHorizontal[ 0 ] );
+			renderer.clear();
+			this.fsQuad.render( renderer ); // Blend it additively over the input texture
+
+			this.fsQuad.material = this.materialCopy;
+			this.copyUniforms[ 'tDiffuse' ].value = this.renderTargetsHorizontal[ 0 ].texture;
+			if ( maskActive ) renderer.state.buffers.stencil.setTest( true );
+
+			if ( this.renderToScreen ) {
+
+				renderer.setRenderTarget( null );
+				this.fsQuad.render( renderer );
+
+			} else {
+
+				renderer.setRenderTarget( readBuffer );
+				this.fsQuad.render( renderer );
+
+			} // Restore renderer settings
+
+
+			renderer.setClearColor( this._oldClearColor, this.oldClearAlpha );
+			renderer.autoClear = oldAutoClear;
+
+		}
+
+		getSeperableBlurMaterial( kernelRadius ) {
+
+			return new THREE.ShaderMaterial( {
+				defines: {
+					'KERNEL_RADIUS': kernelRadius,
+					'SIGMA': kernelRadius
+				},
+				uniforms: {
+					'colorTexture': {
+						value: null
+					},
+					'texSize': {
+						value: new THREE.Vector2( 0.5, 0.5 )
+					},
+					'direction': {
+						value: new THREE.Vector2( 0.5, 0.5 )
+					}
+				},
+				vertexShader: `varying vec2 vUv;
+				void main() {
+					vUv = uv;
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+				}`,
+				fragmentShader: `#include <common>
+				varying vec2 vUv;
+				uniform sampler2D colorTexture;
+				uniform vec2 texSize;
+				uniform vec2 direction;
+
+				float gaussianPdf(in float x, in float sigma) {
+					return 0.39894 * exp( -0.5 * x * x/( sigma * sigma))/sigma;
+				}
+				void main() {
+					vec2 invSize = 1.0 / texSize;
+					float fSigma = float(SIGMA);
+					float weightSum = gaussianPdf(0.0, fSigma);
+					vec3 diffuseSum = texture2D( colorTexture, vUv).rgb * weightSum;
+					for( int i = 1; i < KERNEL_RADIUS; i ++ ) {
+						float x = float(i);
+						float w = gaussianPdf(x, fSigma);
+						vec2 uvOffset = direction * invSize * x;
+						vec3 sample1 = texture2D( colorTexture, vUv + uvOffset).rgb;
+						vec3 sample2 = texture2D( colorTexture, vUv - uvOffset).rgb;
+						diffuseSum += (sample1 + sample2) * w;
+						weightSum += 2.0 * w;
+					}
+					gl_FragColor = vec4(diffuseSum/weightSum, 1.0);
+				}`
+			} );
+
+		}
+
+		getCompositeMaterial( nMips ) {
+
+			return new THREE.ShaderMaterial( {
+				defines: {
+					'NUM_MIPS': nMips
+				},
+				uniforms: {
+					'blurTexture1': {
+						value: null
+					},
+					'blurTexture2': {
+						value: null
+					},
+					'blurTexture3': {
+						value: null
+					},
+					'blurTexture4': {
+						value: null
+					},
+					'blurTexture5': {
+						value: null
+					},
+					'dirtTexture': {
+						value: null
+					},
+					'bloomStrength': {
+						value: 1.0
+					},
+					'bloomFactors': {
+						value: null
+					},
+					'bloomTintColors': {
+						value: null
+					},
+					'bloomRadius': {
+						value: 0.0
+					}
+				},
+				vertexShader: `varying vec2 vUv;
+				void main() {
+					vUv = uv;
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+				}`,
+				fragmentShader: `varying vec2 vUv;
+				uniform sampler2D blurTexture1;
+				uniform sampler2D blurTexture2;
+				uniform sampler2D blurTexture3;
+				uniform sampler2D blurTexture4;
+				uniform sampler2D blurTexture5;
+				uniform sampler2D dirtTexture;
+				uniform float bloomStrength;
+				uniform float bloomRadius;
+				uniform float bloomFactors[NUM_MIPS];
+				uniform vec3 bloomTintColors[NUM_MIPS];
+
+				float lerpBloomFactor(const in float factor) {
+					float mirrorFactor = 1.2 - factor;
+					return mix(factor, mirrorFactor, bloomRadius);
+				}
+
+				void main() {
+					gl_FragColor = bloomStrength * ( lerpBloomFactor(bloomFactors[0]) * vec4(bloomTintColors[0], 1.0) * texture2D(blurTexture1, vUv) +
+						lerpBloomFactor(bloomFactors[1]) * vec4(bloomTintColors[1], 1.0) * texture2D(blurTexture2, vUv) +
+						lerpBloomFactor(bloomFactors[2]) * vec4(bloomTintColors[2], 1.0) * texture2D(blurTexture3, vUv) +
+						lerpBloomFactor(bloomFactors[3]) * vec4(bloomTintColors[3], 1.0) * texture2D(blurTexture4, vUv) +
+						lerpBloomFactor(bloomFactors[4]) * vec4(bloomTintColors[4], 1.0) * texture2D(blurTexture5, vUv) );
+				}`
+			} );
+
+		}
+
+	}
+
+	UnrealBloomPass.BlurDirectionX = new THREE.Vector2( 1.0, 0.0 );
+	UnrealBloomPass.BlurDirectionY = new THREE.Vector2( 0.0, 1.0 );
+
+	THREE.UnrealBloomPass = UnrealBloomPass;
+
+} )();
+
+</script>
 <style>
   :root{--ink:#f4e9d2;--muted:#cdb792;--line:rgba(240,214,150,.18);
         --glass:rgba(36,26,14,.56);--glass2:rgba(48,34,18,.62);--blue:#caa24a;--mint:#e9c873;}
@@ -699,7 +1764,7 @@
     <div class="note">⚠️ Время намаза — приблизительное (астрономический расчёт). Сверяйтесь с офиц. календарём.</div>
   </div>
 </div>
-<div class="hint">палец/мышь — поворот · щипок/колесо — зум</div>
+<div class="hint">Лунная дорожка на воде указывает на соответствующий джайнамаз</div>
 <div class="dock" id="dock">
   <div class="dgroup col">
     <div class="srow"><span>Авто режим</span><label class="sw"><input type="checkbox" id="autoMode" checked><i></i></label></div>
@@ -784,7 +1849,8 @@ const fmt=h=>{if(h==null)return'--:--';h=((h%24)+24)%24;let H=Math.floor(h),M=Ma
 /* ===================== THREE SETUP ===================== */
 const host=document.getElementById('scene');
 let renderer;
-try{renderer=new THREE.WebGLRenderer({antialias:true});}
+const _m0=('ontouchstart' in window)||matchMedia('(max-width:680px)').matches;
+try{renderer=new THREE.WebGLRenderer({antialias:!_m0,powerPreference:'high-performance'});}
 catch(e){document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:30px;text-align:center;color:#eaf0f8;font-family:Inter">Браузер не поддерживает 3D. Откройте в Safari или Chrome.</div>';throw e;}
 const _mob=matchMedia("(max-width:680px)").matches||("ontouchstart" in window);
 renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,_mob?1.5:2));
@@ -792,10 +1858,43 @@ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
 host.appendChild(renderer.domElement);
+renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();},false);
+renderer.domElement.addEventListener('webglcontextrestored',()=>location.reload(),false);
 const isMobile=matchMedia('(max-width:680px)').matches||('ontouchstart' in window);
+/* ---------- adaptive graphics tier (runs on ANY device) ---------- */
+const _cores=navigator.hardwareConcurrency||4,_mem=navigator.deviceMemory||4;
+const _weak=isMobile&&(_cores<=4||_mem<=3);
+const TIER=isMobile?(_weak?'low':'mid'):'high';
+const GFX=({low:{shadow:512,radius:1,fronds:18,particles:300,pr:1},
+            mid:{shadow:1024,radius:2,fronds:28,particles:700,pr:Math.min(devicePixelRatio,1.5)},
+            high:{shadow:4096,radius:4,fronds:40,particles:1800,pr:Math.min(devicePixelRatio,2)}})[TIER];
+renderer.setPixelRatio(GFX.pr);
+let _pT=performance.now(),_pN=0,_pLvl=0,_postEnabled=true;
+function perfGuard(now){ _pN++; if(now-_pT<2000)return;
+  const fps=_pN*1000/(now-_pT); _pT=now; _pN=0;
+  if(fps<26&&_pLvl<3){ _pLvl++;
+    if(_pLvl===1)_postEnabled=false;                  // drop bloom first (biggest win)
+    else if(_pLvl===2)renderer.setPixelRatio(1);
+    else { renderer.shadowMap.enabled=false; if(typeof sun!=='undefined')sun.castShadow=false; } } }
 
 const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x10182a,0.012);
 const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,20000);
+/* ---------- cinematic post-processing: bloom + grade + correct sRGB ---------- */
+const USE_POST=(TIER!=='low')&&!!THREE.EffectComposer;
+let composer=null,bloomPass=null;
+function renderFrame(){ if(composer&&_postEnabled)composer.render(); else renderer.render(scene,camera); }
+(function initPost(){
+  if(!USE_POST)return;
+  composer=new THREE.EffectComposer(renderer);composer.setSize(innerWidth,innerHeight);
+  composer.addPass(new THREE.RenderPass(scene,camera));
+  bloomPass=new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),0.55,0.4,0.88); // strength,radius,threshold
+  composer.addPass(bloomPass);
+  const Grade={uniforms:{tDiffuse:{value:null},sat:{value:1.08}},
+    vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+    fragmentShader:'uniform sampler2D tDiffuse;uniform float sat;varying vec2 vUv;void main(){vec4 c=texture2D(tDiffuse,vUv);float l=dot(c.rgb,vec3(0.299,0.587,0.114));c.rgb=mix(vec3(l),c.rgb,sat);float d=length(vUv-0.5);c.rgb*=1.0-smoothstep(0.45,0.82,d)*0.26;gl_FragColor=c;}'};
+  composer.addPass(new THREE.ShaderPass(Grade));
+  const gamma=new THREE.ShaderPass(THREE.GammaCorrectionShader);gamma.renderToScreen=true;composer.addPass(gamma);
+})();
 
 let camR=50,camTheta=Math.PI*0.62,camPhi=1.10,target=new THREE.Vector3(0,2.6,0);
 function placeCam(){camera.position.set(target.x+camR*Math.sin(camPhi)*Math.cos(camTheta),
@@ -819,10 +1918,27 @@ canvas.addEventListener('touchend',e=>{if(e.touches.length===0)drag=false;
 
 /* lights */
 const hemi=new THREE.HemisphereLight(0xeae6dc,0x6b5a3a,0.5);scene.add(hemi);
+const warmGlow=new THREE.PointLight(0xffb45a,0,60,2.0);warmGlow.position.set(0,5,4);scene.add(warmGlow);
 const sun=new THREE.DirectionalLight(0xfff2da,1.8);sun.castShadow=true;
-sun.shadow.mapSize.set(isMobile?1024:2048,isMobile?1024:2048);
+sun.shadow.mapSize.set(GFX.shadow,GFX.shadow);sun.shadow.radius=GFX.radius;
 const sc=sun.shadow.camera;sc.near=1;sc.far=260;sc.left=-30;sc.right=30;sc.top=30;sc.bottom=-30;
 sun.shadow.bias=-0.0004;sun.shadow.normalBias=0.03;scene.add(sun);scene.add(sun.target);
+/* ---------- IBL environment: sky-tinted reflections + ambient (UE5-style) ---------- */
+const pmrem=new THREE.PMREMGenerator(renderer);pmrem.compileEquirectangularShader();
+let _envTex=null,_envKey=-99;
+const _envC=document.createElement('canvas');_envC.width=256;_envC.height=128;const _envCtx=_envC.getContext('2d');
+function refreshEnv(dayAmt){
+  const key=Math.round(dayAmt*12);if(key===_envKey)return;_envKey=key;
+  const lc=(a,b,t)=>new THREE.Color(a).lerp(new THREE.Color(b),t);
+  const zen=lc(0x0a1426,0x3a7bd5,dayAmt),mid=lc(0x141d30,0x9fc6e8,dayAmt),hor=lc(0x1a2238,0xe8d9b8,dayAmt);
+  const grd=_envCtx.createLinearGradient(0,0,0,128);
+  grd.addColorStop(0,'#'+zen.getHexString());grd.addColorStop(0.55,'#'+mid.getHexString());grd.addColorStop(1,'#'+hor.getHexString());
+  _envCtx.fillStyle=grd;_envCtx.fillRect(0,0,256,128);
+  const tx=new THREE.CanvasTexture(_envC);tx.mapping=THREE.EquirectangularReflectionMapping;
+  const old=_envTex;_envTex=pmrem.fromEquirectangular(tx).texture;scene.environment=_envTex;
+  tx.dispose();if(old)old.dispose();
+}
+refreshEnv(1);
 const moon=new THREE.DirectionalLight(0xaecbff,0);scene.add(moon);scene.add(moon.target);
 
 /* ===================== GEOMETRY HELPERS ===================== */
@@ -841,32 +1957,60 @@ function vnoise(x,y){return 0.6*Math.sin(x*0.9+1.3)*Math.cos(y*0.8)+0.3*Math.sin
   +0.18*Math.cos(x*3.1-y*2.3)+0.12*Math.sin(x*5+y*4);}
 
 /* sand texture (realistic grain + carved prayer names) */
-let sandCanvas,sandCtx,sandTex;
+let sandTex,sandNorm,sandRough;
 function buildSandTexture(){
-  sandCanvas=document.createElement('canvas');sandCanvas.width=1024;sandCanvas.height=1024;
-  sandCtx=sandCanvas.getContext('2d');sandTex=new THREE.CanvasTexture(sandCanvas);sandTex.anisotropy=4;sandTex.encoding=THREE.sRGBEncoding;sandTex.wrapS=sandTex.wrapT=THREE.RepeatWrapping;sandTex.repeat.set(9,9);
-}
-function paintSand(){
-  const g=sandCtx,W=1024;
-  g.fillStyle='#dcd4c2';g.fillRect(0,0,W,W);
-  const img=g.getImageData(0,0,W,W),d=img.data;            // fine grain
-  for(let i=0;i<d.length;i+=4){const n=(Math.random()-0.5)*30;d[i]+=n;d[i+1]+=n*0.95;d[i+2]+=n*0.78;}
-  g.putImageData(img,0,0);
-  g.globalAlpha=0.06;                                       // density mottling
-  for(let k=0;k<40;k++){const x=Math.random()*W,y=Math.random()*W,r=40+Math.random()*120;
-    const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,Math.random()<0.5?'#b9a878':'#efe6cf');gr.addColorStop(1,'rgba(0,0,0,0)');
-    g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,7);g.fill();}
-  g.globalAlpha=0.07;g.strokeStyle='#7a6a4a';g.lineWidth=2; // wind ripples
-  for(let k=0;k<90;k++){g.beginPath();const y=Math.random()*W,amp=5+Math.random()*8,ph=Math.random()*6;
-    for(let x=0;x<=W;x+=14)g.lineTo(x,y+Math.sin(x*0.02+ph)*amp);g.stroke();}
-  g.globalAlpha=1;
-  for(let k=0;k<260;k++){const x=Math.random()*W,y=Math.random()*W,s=0.8+Math.random()*2.2; // pebbles/specks
-    g.fillStyle=Math.random()<0.5?'rgba(70,58,38,0.5)':'rgba(245,238,214,0.6)';g.beginPath();g.arc(x,y,s,0,7);g.fill();}
+  const mob=isMobile,AW=mob?1024:2048,HW=mob?512:1024;
+  /* ---------- ALBEDO (high-res, low tiling) ---------- */
+  const ac=document.createElement('canvas');ac.width=ac.height=AW;const a=ac.getContext('2d');
+  a.fillStyle='#d9cfb4';a.fillRect(0,0,AW,AW);
+  for(let k=0;k<28;k++){const x=Math.random()*AW,y=Math.random()*AW,r=AW*(0.12+Math.random()*0.22); // large-scale variation breaks tiling
+    const gr=a.createRadialGradient(x,y,0,x,y,r),warm=Math.random()<0.5;
+    gr.addColorStop(0,warm?'rgba(194,174,126,0.17)':'rgba(238,228,198,0.16)');gr.addColorStop(1,'rgba(0,0,0,0)');
+    a.fillStyle=gr;a.beginPath();a.arc(x,y,r,0,7);a.fill();}
+  const im=a.getImageData(0,0,AW,AW),d=im.data;                       // fine grain
+  for(let i=0;i<d.length;i+=4){const n=(Math.random()-0.5)*26;d[i]+=n;d[i+1]+=n*0.95;d[i+2]+=n*0.78;}
+  a.putImageData(im,0,0);
+  a.lineWidth=2;                                                      // wind ripples (light/dark pairs)
+  for(let k=0;k<150;k++){const y=Math.random()*AW,amp=AW*(0.004+Math.random()*0.006),ph=Math.random()*6;
+    a.globalAlpha=0.05;a.strokeStyle='#7a6a4a';a.beginPath();for(let x=0;x<=AW;x+=12)a.lineTo(x,y+Math.sin(x*0.018+ph)*amp);a.stroke();
+    a.globalAlpha=0.045;a.strokeStyle='#f1e8cf';a.beginPath();for(let x=0;x<=AW;x+=12)a.lineTo(x,y+4+Math.sin(x*0.018+ph)*amp);a.stroke();}
+  a.globalAlpha=1;
+  for(let k=0;k<(mob?260:540);k++){const x=Math.random()*AW,y=Math.random()*AW,s=AW*0.0008*(1+Math.random()*2.4); // pebbles/shell specks
+    a.fillStyle=Math.random()<0.5?'rgba(70,58,38,0.5)':'rgba(247,240,218,0.6)';a.beginPath();a.arc(x,y,s,0,7);a.fill();}
+  sandTex=new THREE.CanvasTexture(ac);sandTex.wrapS=sandTex.wrapT=THREE.RepeatWrapping;sandTex.repeat.set(5,5);sandTex.anisotropy=16;sandTex.encoding=THREE.sRGBEncoding;
+  /* ---------- HEIGHT -> NORMAL (micro-relief reacts to light) ---------- */
+  const hc=document.createElement('canvas');hc.width=hc.height=HW;const hg=hc.getContext('2d');
+  hg.fillStyle='#808080';hg.fillRect(0,0,HW,HW);
+  const him=hg.getImageData(0,0,HW,HW),hd=him.data;                   // grain height
+  for(let i=0;i<hd.length;i+=4){const n=(Math.random()-0.5)*40;hd[i]=hd[i+1]=hd[i+2]=128+n;}
+  hg.putImageData(him,0,0);
+  for(let k=0;k<150;k++){const y=Math.random()*HW,amp=HW*(0.004+Math.random()*0.006),ph=Math.random()*6; // ripple ridges
+    hg.globalAlpha=0.5;hg.lineWidth=3;hg.strokeStyle='#cccccc';hg.beginPath();for(let x=0;x<=HW;x+=10)hg.lineTo(x,y+Math.sin(x*0.018+ph)*amp);hg.stroke();
+    hg.strokeStyle='#363636';hg.beginPath();for(let x=0;x<=HW;x+=10)hg.lineTo(x,y+5+Math.sin(x*0.018+ph)*amp);hg.stroke();}
+  hg.globalAlpha=1;
+  for(let k=0;k<44;k++){const x=Math.random()*HW,y=Math.random()*HW,r=HW*(0.03+Math.random()*0.06); // soft dune bumps
+    const gr=hg.createRadialGradient(x,y,0,x,y,r),up=Math.random()<0.5;
+    gr.addColorStop(0,up?'rgba(255,255,255,0.25)':'rgba(0,0,0,0.22)');gr.addColorStop(1,'rgba(128,128,128,0)');
+    hg.fillStyle=gr;hg.beginPath();hg.arc(x,y,r,0,7);hg.fill();}
+  const src=hg.getImageData(0,0,HW,HW).data,nc=document.createElement('canvas');nc.width=nc.height=HW;
+  const ng=nc.getContext('2d'),nim=ng.createImageData(HW,HW),nd=nim.data,str=2.4,M=HW-1;
+  const Hh=(x,y)=>src[(((y&M)*HW)+(x&M))*4]/255;
+  for(let y=0;y<HW;y++)for(let x=0;x<HW;x++){const dx=(Hh(x+1,y)-Hh(x-1,y))*str,dy=(Hh(x,y+1)-Hh(x,y-1))*str;
+    let nx=-dx,ny=-dy,nz=1;const l=Math.hypot(nx,ny,nz);nx/=l;ny/=l;nz/=l;
+    const o=(y*HW+x)*4;nd[o]=(nx*.5+.5)*255;nd[o+1]=(ny*.5+.5)*255;nd[o+2]=(nz*.5+.5)*255;nd[o+3]=255;}
+  ng.putImageData(nim,0,0);
+  sandNorm=new THREE.CanvasTexture(nc);sandNorm.wrapS=sandNorm.wrapT=THREE.RepeatWrapping;sandNorm.repeat.set(5,5);sandNorm.anisotropy=16;
+  /* ---------- ROUGHNESS ---------- */
+  const rc=document.createElement('canvas');rc.width=rc.height=512;const rg=rc.getContext('2d');
+  const rim=rg.createImageData(512,512),rd=rim.data;
+  for(let i=0;i<rd.length;i+=4){const v=228+(Math.random()-0.5)*26;rd[i]=rd[i+1]=rd[i+2]=v;rd[i+3]=255;}
+  rg.putImageData(rim,0,0);
+  sandRough=new THREE.CanvasTexture(rc);sandRough.wrapS=sandRough.wrapT=THREE.RepeatWrapping;sandRough.repeat.set(5,5);
 }
 function azToPos(az,r){return{x:Math.sin(az*D2R)*r,z:-Math.cos(az*D2R)*r};}
 
 /* ===================== SOLID SAND ISLAND (natural mound) ===================== */
-buildSandTexture();paintSand();
+buildSandTexture();
 function _ss(t){t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);}
 // natural irregular mound: highest under the palm -> gradual slope -> irregular shoreline -> underwater
 function islandH(x,z){const r=Math.hypot(x,z),a=Math.atan2(z,x);
@@ -888,8 +2032,8 @@ const sandGeo=makeRadial(0,R_ISLAND,190,170);
    const w=Math.max(0,Math.min(1,(0.7-hy)/1.4));let c=dry.clone().lerp(wetc,w);
    if(hy<-0.4)c.lerp(deep,Math.min(1,(-0.4-hy)/2.0));col.push(c.r,c.g,c.b);}
  sandGeo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));sandGeo.computeVertexNormals();}
-const sandMat=new THREE.MeshStandardMaterial({map:sandTex,bumpMap:sandTex,bumpScale:0.10,
-  vertexColors:true,color:0xffffff,roughness:1,metalness:0,side:THREE.DoubleSide});
+const sandMat=new THREE.MeshStandardMaterial({map:sandTex,normalMap:sandNorm,normalScale:new THREE.Vector2(1.0,1.0),
+  roughnessMap:sandRough,vertexColors:true,color:0xffffff,roughness:1,metalness:0,side:THREE.DoubleSide});
 const sand=new THREE.Mesh(sandGeo,sandMat);sand.receiveShadow=true;sand.castShadow=true;scene.add(sand);
 
 /* ===================== SEA ===================== */
@@ -953,9 +2097,9 @@ function waterNormalsTex(){const c=document.createElement('canvas');c.width=c.he
   for(let i=0;i<d.length;i+=4){const n=124+Math.random()*10;d[i]=n;d[i+1]=n;d[i+2]=255;d[i+3]=255;}
   g.putImageData(im,0,0);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;return t;}
 if(!isMobile&&THREE.Water&&THREE.Sky){try{
-  WATER=new THREE.Water(new THREE.PlaneGeometry(2000,2000),{textureWidth:512,textureHeight:512,
+  WATER=new THREE.Water(new THREE.PlaneGeometry(2000,2000),{textureWidth:1024,textureHeight:1024,
     waterNormals:waterNormalsTex(),sunDirection:new THREE.Vector3(0,1,0),
-    sunColor:0xffffff,waterColor:0x1f8aa0,distortionScale:2.4,fog:false});
+    sunColor:0xffffff,waterColor:0x1f8aa0,distortionScale:3.2,fog:false});
   WATER.rotation.x=-Math.PI/2;WATER.position.y=-0.05;scene.add(WATER);
   SKY=new THREE.Sky();SKY.scale.setScalar(10000);scene.add(SKY);
   const u=SKY.material.uniforms;u['turbidity'].value=8;u['rayleigh'].value=2.2;
@@ -1005,7 +2149,7 @@ moonHalo.scale.setScalar(18);scene.add(moonHalo);
 const clouds=[];
 
 /* ===================== RAIN ===================== */
-const RN=isMobile?700:1800;
+const RN=GFX.particles;
 const rainGeo=new THREE.BufferGeometry();const rpos=new Float32Array(RN*6);
 function seedRain(){for(let i=0;i<RN;i++){const a=Math.random()*Math.PI*2,d=Math.random()*R_SEA;
   const x=Math.cos(a)*d,z=Math.sin(a)*d,y=Math.random()*16;
@@ -1058,46 +2202,26 @@ function makeFrond(len,bend,tint){const grp=new THREE.Group();
     new THREE.Vector3(len*0.62,len*0.18,bz*0.7),new THREE.Vector3(len*0.85,len*0.02,bz),new THREE.Vector3(len,-len*0.24,bz*1.35)]);
   const rachis=new THREE.Mesh(taperedTube(arch,22,5,t=>0.05*(1-0.8*t)),new THREE.MeshStandardMaterial({color:0x53631f,roughness:.85}));
   rachis.castShadow=true;grp.add(rachis);
-  const pos=[],col=[],idx=[];let v=0;const NL=34,UP=new THREE.Vector3(0,1,0);
-  const baseColor=new THREE.Color(tint||0x5c8c3e);
+  const pos=[],idx=[];let v=0;const NL=32,UP=new THREE.Vector3(0,1,0);
   for(let k=2;k<NL;k++){const t=k/NL,P=arch.getPointAt(t),T=arch.getTangentAt(t).normalize();
-    const leafLen=(1-0.55*t)*len*0.27,w=leafLen*0.19,pitch=0.6-0.28*t;
+    const leafLen=(1-0.55*t)*len*0.27,w=leafLen*0.15,pitch=0.6-0.28*t;
     for(const side of[-1,1]){const S=new THREE.Vector3(0,0,side);
       const dir=new THREE.Vector3().addScaledVector(S,Math.cos(pitch)).addScaledVector(UP,Math.sin(pitch)).addScaledVector(T,0.4).normalize();
       let zc=T.clone().addScaledVector(dir,-T.dot(dir));if(zc.lengthSq()<1e-5)zc.set(0,0,1);zc.normalize();
       const bl=P.clone().addScaledVector(zc,-w/2),br=P.clone().addScaledVector(zc,w/2),tp=P.clone().addScaledVector(dir,leafLen);
-      tp.y-=leafLen*0.14;pos.push(bl.x,bl.y,bl.z,br.x,br.y,br.z,tp.x,tp.y,tp.z);idx.push(v,v+1,v+2);v+=3;
-      // natural per-leaflet colour: gentle random jitter around the base tint, lighter/thinner-looking tip (subtle translucency)
-      const jc=baseColor.clone().offsetHSL((Math.random()-0.5)*0.014,(Math.random())*0.05,(Math.random()-0.5)*0.05+t*0.03);
-      const tc=jc.clone().offsetHSL(0.01,-0.06,0.12);
-      col.push(jc.r,jc.g,jc.b,0.96, jc.r,jc.g,jc.b,0.96, tc.r,tc.g,tc.b,0.45);}}
-  const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
-  lg.setAttribute('color',new THREE.Float32BufferAttribute(col,4));lg.setIndex(idx);lg.computeVertexNormals();
-  const leaves=new THREE.Mesh(lg,new THREE.MeshPhysicalMaterial({vertexColors:true,color:0xffffff,transparent:true,
-    opacity:1,roughness:0.5,clearcoat:0.22,clearcoatRoughness:0.4,side:THREE.DoubleSide}));
+      tp.y-=leafLen*0.14;pos.push(bl.x,bl.y,bl.z,br.x,br.y,br.z,tp.x,tp.y,tp.z);idx.push(v,v+1,v+2);v+=3;}}
+  const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));lg.setIndex(idx);lg.computeVertexNormals();
+  const leaves=new THREE.Mesh(lg,new THREE.MeshStandardMaterial({color:tint||0x4e8233,roughness:.7,side:THREE.DoubleSide}));
   leaves.castShadow=true;grp.add(leaves);return grp;}
 const crown=new THREE.Group();crown.position.copy(topPt);crown.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),topTan);palm.add(crown);
-const GREEN_LIGHT=[0x7fc24a,0x8ccc52,0x6fb83e];   // young, vivid, sunlit shoots
-const GREEN_MAIN=[0x2f8a22,0x358f28,0x3f9b2e,0x4aa83a]; // rich, saturated healthy fronds
-const GREEN_SHADE=[0x1f5e18,0x256b1e,0x2a7a22];   // lower fronds, still vivid but in shadow
-function pickGreen(tier){const r=Math.random();let pool;
-  if(tier<=1)pool=r<0.55?GREEN_LIGHT:GREEN_MAIN;
-  else if(tier===2)pool=r<0.12?GREEN_LIGHT:(r<0.86?GREEN_MAIN:GREEN_SHADE);
-  else pool=r<0.6?GREEN_SHADE:GREEN_MAIN;
-  return pool[Math.floor(Math.random()*pool.length)];}
-const FROND_N=isMobile?32:44;
-const PITCH_T=[0.98,0.70,0.42,0.12],LEN_T=[0.35,0.15,0,0.55];
-for(let i=0;i<FROND_N;i++){const az=(i/FROND_N)*Math.PI*2+(i%2?0.15:0)+(Math.random()-0.5)*0.12,tier=i%4;
-  const basePitch=PITCH_T[tier]+(Math.random()-0.5)*0.16;
-  const len=2.7+LEN_T[tier]+(Math.random()*0.6-0.15);
+const GREENS=[0x4c8a2a,0x579930,0x428024,0x60a838,0x3a7320];
+const NF=GFX.fronds;                            // crown density scales with device
+for(let i=0;i<NF;i++){const az=(i/NF)*Math.PI*2+(i%2?0.16:0)+(Math.random()-0.5)*0.10,tier=i%4;
+  const basePitch=(tier===0?1.06:tier===1?0.74:tier===2?0.44:0.14)+(Math.random()-0.5)*0.12;
+  const len=2.95+(tier===0?0.5:tier===3?0.65:0.2)+(Math.random()*0.6-0.15);  // longer fronds
   const azG=new THREE.Group();azG.rotation.y=az;crown.add(azG);
-  const pitchG=new THREE.Group();pitchG.rotation.z=basePitch;pitchG.rotation.y=(Math.random()-0.5)*0.22;azG.add(pitchG);
-  pitchG.add(makeFrond(len,(Math.random()-0.5)*1.4,pickGreen(tier)));}
-// young upright "spear" shoots filling the very heart of the crown — gives that full, lush look from any angle
-for(let s=0;s<7;s++){const az=(s/7)*Math.PI*2+0.3+(Math.random()-0.5)*0.3;
-  const azG=new THREE.Group();azG.rotation.y=az;crown.add(azG);
-  const pitchG=new THREE.Group();pitchG.rotation.z=1.22+(Math.random()-0.5)*0.12;pitchG.rotation.y=(Math.random()-0.5)*0.18;azG.add(pitchG);
-  pitchG.add(makeFrond(1.05+Math.random()*0.35,(Math.random()-0.5)*0.5,GREEN_LIGHT[Math.floor(Math.random()*GREEN_LIGHT.length)]));}
+  const pitchG=new THREE.Group();pitchG.rotation.z=basePitch;pitchG.rotation.y=(Math.random()-0.5)*0.26;azG.add(pitchG);
+  pitchG.add(makeFrond(len,(Math.random()-0.5)*1.6,GREENS[i%GREENS.length]));}
 for(let d=0;d<3;d++){const az=d/3*Math.PI*2+0.6;
   const bse=topPt.clone().add(new THREE.Vector3(Math.cos(az)*0.32,-0.12,Math.sin(az)*0.32));
   const dm=new THREE.MeshStandardMaterial({color:0xc07a32,roughness:.6});
@@ -1112,25 +2236,30 @@ for(let d=0;d<3;d++){const az=d/3*Math.PI*2+0.6;
 /* ===================== PRAYER RUGS (джайнамаз) — premium black & gold ===================== */
 function rugTex(name){
   const W=1024,H=1448,c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');
-  g.fillStyle='#08080a';g.fillRect(0,0,W,H);
+  g.fillStyle='#0a0a0c';g.fillRect(0,0,W,H);
   const im=g.getImageData(0,0,W,H),d=im.data;
-  for(let i=0;i<d.length;i+=4){const n=(Math.random()-0.5)*7;d[i]+=n;d[i+1]+=n;d[i+2]+=n;}g.putImageData(im,0,0);
-  const gold='#e7c46a',gold2='#caa343',bright='#ffd84a';
-  g.strokeStyle=gold;g.lineWidth=24;g.strokeRect(54,54,W-108,H-108);
-  g.strokeStyle=gold2;g.lineWidth=7;g.strokeRect(96,96,W-192,H-192);
-  function diamondRow(y){for(let x=150;x<=W-150;x+=58){g.save();g.translate(x,y);g.rotate(Math.PI/4);
-    g.strokeStyle=gold;g.lineWidth=4;g.strokeRect(-15,-15,30,30);g.restore();}}
-  diamondRow(150);diamondRow(H-150);
-  g.strokeStyle=gold;g.lineWidth=12;g.beginPath();
-  g.moveTo(300,470);g.lineTo(300,300);g.quadraticCurveTo(512,150,724,300);g.lineTo(724,470);g.stroke();
-  g.fillStyle=gold;g.beginPath();g.arc(512,360,18,0,7);g.fill();
-  g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';
-  let fs=360;g.font='900 '+fs+'px Inter,Arial,sans-serif';
-  while(g.measureText(name).width>W-210&&fs>140){fs-=8;g.font='900 '+fs+'px Inter,Arial,sans-serif';}
-  const ny=H*0.62;
-  g.lineWidth=fs*0.16;g.strokeStyle='#000';g.strokeText(name,512,ny);
-  g.lineWidth=fs*0.05;g.strokeStyle='#7a5a16';g.strokeText(name,512,ny);
-  g.fillStyle=bright;g.fillText(name,512,ny);
+  for(let i=0;i<d.length;i+=4){const n=(Math.random()-0.5)*6;d[i]+=n;d[i+1]+=n;d[i+2]+=n;}g.putImageData(im,0,0);
+  const gold='#d9b24a',gold2='#967837',bright='#f0c24e',cx=W/2;
+  g.strokeStyle=gold;g.lineWidth=20;g.strokeRect(50,50,W-100,H-100);          // ornate border
+  g.strokeStyle=gold2;g.lineWidth=6;g.strokeRect(92,92,W-184,H-184);
+  g.fillStyle=gold;[[92,92],[W-92,92],[92,H-92],[W-92,H-92]].forEach(p=>{g.beginPath();g.arc(p[0],p[1],14,0,7);g.fill();});
+  g.save();g.fillStyle=bright;const cy=300,r=78;                              // crescent moon (top)
+  g.beginPath();g.arc(cx,cy,r,0,7);g.fill();
+  g.globalCompositeOperation='destination-out';g.beginPath();g.arc(cx+34,cy-14,r,0,7);g.fill();g.restore();
+  g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';            // name
+  let fs=300;g.font='900 '+fs+'px Inter,Arial,sans-serif';
+  while(g.measureText(name).width>W-240&&fs>120){fs-=8;g.font='900 '+fs+'px Inter,Arial,sans-serif';}
+  const ny=770;
+  g.lineWidth=fs*0.14;g.strokeStyle='#000';g.strokeText(name,cx,ny);
+  g.fillStyle=bright;g.fillText(name,cx,ny);
+  g.fillStyle=gold;const base=1238;                                          // mosque silhouette (bottom)
+  g.beginPath();g.moveTo(cx-150,base);g.lineTo(cx-150,base-120);
+  g.quadraticCurveTo(cx,base-330,cx+150,base-120);g.lineTo(cx+150,base);g.closePath();g.fill();
+  g.beginPath();g.arc(cx,base-330,11,0,7);g.fill();
+  [-235,235].forEach(dx=>{g.beginPath();g.moveTo(cx+dx-66,base);g.lineTo(cx+dx-66,base-72);
+    g.quadraticCurveTo(cx+dx,base-168,cx+dx+66,base-72);g.lineTo(cx+dx+66,base);g.closePath();g.fill();});
+  [-308,308].forEach(dx=>{g.fillRect(cx+dx-12,base-280,24,280);
+    g.beginPath();g.arc(cx+dx,base-280,18,0,7);g.fill();});
   const t=new THREE.CanvasTexture(c);t.anisotropy=16;t.encoding=THREE.sRGBEncoding;return t;}
 function makeRug(name){
   const grp=new THREE.Group(),w=3.8,h=5.4,tex=rugTex(name);
@@ -1144,6 +2273,23 @@ function makeRug(name){
     emissive:0xffffff,emissiveIntensity:1.0,roughness:.55,metalness:0.05}));
   top.rotation.x=-Math.PI/2;top.position.y=0.12;top.castShadow=false;top.receiveShadow=false;grp.add(top);
   return {grp,top};}
+// --- grass tufts + pebbles on the sand (reference detail) ---
+(function(){
+  const grassMat=new THREE.MeshStandardMaterial({color:0x586a28,roughness:.92,side:THREE.DoubleSide});
+  const pebMat=new THREE.MeshStandardMaterial({color:0x6b6256,roughness:.95});
+  const NG=isMobile?24:52,NP=isMobile?20:44;
+  function blade(){const hh=0.5+Math.random()*0.55,g=new THREE.ConeGeometry(0.045,hh,4);g.translate(0,hh/2,0);return g;}
+  for(let i=0;i<NG;i++){const a=Math.random()*6.2832,rr=5+Math.random()*11.5,x=Math.cos(a)*rr,z=Math.sin(a)*rr,y=islandH(x,z);
+    if(y<0.5)continue;const cl=new THREE.Group();cl.position.set(x,y-0.05,z);
+    const n=3+(Math.random()*3|0);
+    for(let b=0;b<n;b++){const m=new THREE.Mesh(blade(),grassMat);
+      m.rotation.z=(Math.random()-0.5)*0.55;m.rotation.x=(Math.random()-0.5)*0.55;
+      m.position.set((Math.random()-0.5)*0.32,0,(Math.random()-0.5)*0.32);m.castShadow=true;cl.add(m);}
+    cl.scale.setScalar(0.8+Math.random()*0.7);scene.add(cl);}
+  for(let i=0;i<NP;i++){const a=Math.random()*6.2832,rr=5+Math.random()*12.5,x=Math.cos(a)*rr,z=Math.sin(a)*rr,y=islandH(x,z);
+    if(y<0.35)continue;const s=0.10+Math.random()*0.18,p=new THREE.Mesh(new THREE.SphereGeometry(s,6,5),pebMat);
+    p.position.set(x,y-s*0.3,z);p.scale.y=0.6;p.castShadow=true;p.receiveShadow=true;scene.add(p);}
+})();
 const rugObjs={};
 PRAYERS.filter(p=>!p.sep).forEach(p=>{const r=makeRug(p.nm.toUpperCase());scene.add(r.grp);rugObjs[p.key]={g:r.grp,top:r.top};});
 
@@ -1277,8 +2423,9 @@ function update(now){
 
   // sand brightness + wet + moonlit night tint (vertex colors carry base sand color)
   const wet=weather.rain;
-  sandMat.color.copy(C(0xdcc088)).lerp(C(0x8b96b4),nightAmt*0.45).lerp(C(0x8a7e63),wet*0.25)
+  sandMat.color.copy(C(0xdcc088)).lerp(C(0x6e5a36),nightAmt*0.45).lerp(C(0x8a7e63),wet*0.25)
     .multiplyScalar(0.80+0.26*dayAmt+nightAmt*0.30);
+  warmGlow.intensity=nightAmt*1.5;refreshEnv(dayAmt);  // cozy warm glow + sky IBL
   sandMat.roughness=1-wet*0.4;
 
   // sea waves (only the simple sea; advanced Water animates itself)
@@ -1326,11 +2473,11 @@ function update(now){
   if(alt>0.5){const L=1/Math.tan(alt*D2R);el('shadow').innerHTML=`Высота солнца: <b>+${alt.toFixed(2)}°</b> · тень ×${L.toFixed(2)}`;}
   else el('shadow').innerHTML=`Высота солнца: <b>${alt.toFixed(2)}°</b> (за горизонтом)`;
 
-  renderer.render(scene,camera);
+  perfGuard(now);renderFrame();
   requestAnimationFrame(update);
  }catch(err){
   if(!window.__ue){window.__ue=1;console.error('update error:',err);}
-  renderer.render(scene,camera);requestAnimationFrame(update);
+  renderFrame();requestAnimationFrame(update);
  }
 }
 
@@ -1349,7 +2496,7 @@ el('nowBtn').onclick=()=>{useRealTime=true;playing=false;forceNight=false;el('ni
 el('playBtn').onclick=()=>{playing=!playing;useRealTime=false;lastFrame=performance.now();
   el('playBtn').classList.toggle('on',playing);el('playBtn').textContent=playing?'❚❚':'▶ День';};
 el('toggle').onclick=()=>el('panel').classList.toggle('min');
-function onResize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);}
+function onResize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);if(composer)composer.setSize(innerWidth,innerHeight);}
 addEventListener('resize',onResize);addEventListener('orientationchange',()=>setTimeout(onResize,250));
 
 
