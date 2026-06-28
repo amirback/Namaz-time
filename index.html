@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Намаз — солнечные часы</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>/* Three.js r128 inlined */
@@ -547,11 +547,11 @@
   :root{--ink:#f4e9d2;--muted:#cdb792;--line:rgba(240,214,150,.18);
         --glass:rgba(36,26,14,.56);--glass2:rgba(48,34,18,.62);--blue:#caa24a;--mint:#e9c873;}
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
+  html,body{height:100%;height:100dvh;position:fixed;inset:0;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}
   body{font-family:Inter,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
        background:#05080f;overflow:hidden;overscroll-behavior:none;
        -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
-  #scene{position:fixed;inset:0}
+  #scene{position:fixed;inset:0;touch-action:none}
   #flash{position:fixed;inset:0;background:#dfe9ff;opacity:0;pointer-events:none;z-index:3}
 
   .panel{position:fixed;top:18px;left:18px;width:300px;max-height:calc(100vh - 130px);overflow:auto;
@@ -641,10 +641,24 @@
   .hint{position:fixed;bottom:92px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--muted);
         background:rgba(16,22,36,.5);backdrop-filter:blur(10px);padding:5px 12px;border-radius:20px;z-index:10}
   @media(max-width:820px){
-    .panel{width:auto;left:10px;right:10px;top:10px;max-height:46vh}
-    .rail{right:10px;gap:9px}.gbtn{width:46px;height:46px;font-size:18px}
-    .dock{left:10px;right:10px;transform:none;flex-wrap:wrap;justify-content:center;gap:12px;bottom:10px;padding:12px}
-    .dsep{display:none}.hint{display:none}.srow{min-width:auto}
+    .panel{width:auto;left:calc(8px + env(safe-area-inset-left));right:calc(8px + env(safe-area-inset-right));
+           top:calc(8px + env(safe-area-inset-top));max-height:42vh;padding:14px;border-radius:20px}
+    .panel.min{max-height:none}
+    .rail{right:calc(8px + env(safe-area-inset-right));gap:10px}
+    .gbtn{width:50px;height:50px;font-size:19px}
+    .dock{left:calc(8px + env(safe-area-inset-left));right:calc(8px + env(safe-area-inset-right));
+          transform:none;flex-wrap:wrap;justify-content:center;gap:12px;
+          bottom:calc(8px + env(safe-area-inset-bottom));padding:12px}
+    .dsep{display:none}.hint{display:none}.srow{min-width:auto;flex:1 1 100%}
+    .sw{transform:scale(1.15)}
+    input[type=range]{height:30px}
+    h1{font-size:14px}.clock{font-size:38px}
+    select,input[type=date]{font-size:16px;min-height:40px}  /* 16px stops iOS zoom-on-focus */
+    .ptime{padding:9px 8px}
+  }
+  @media(max-width:820px) and (orientation:landscape){
+    .panel{max-height:78vh;width:250px;right:auto}
+    .dock{left:auto;right:calc(70px + env(safe-area-inset-right));max-width:60vw}
   }
 </style>
 </head>
@@ -772,7 +786,8 @@ const host=document.getElementById('scene');
 let renderer;
 try{renderer=new THREE.WebGLRenderer({antialias:true});}
 catch(e){document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:30px;text-align:center;color:#eaf0f8;font-family:Inter">Браузер не поддерживает 3D. Откройте в Safari или Chrome.</div>';throw e;}
-renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const _mob=matchMedia("(max-width:680px)").matches||("ontouchstart" in window);
+renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,_mob?1.5:2));
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
@@ -892,12 +907,12 @@ const seaBase=seaGeo.attributes.position.array.slice();
 const seaMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.14,metalness:0.45,transparent:true,opacity:0.86});
 const sea=new THREE.Mesh(seaGeo,seaMat);sea.position.y=-0.06;sea.receiveShadow=true;scene.add(sea);
 // bright turquoise shallows ringing the island (clear land/water boundary)
-const shoalGeo=makeRadial(R_SAND-1.0,R_SAND+4.0,8,110);
-{const p=shoalGeo.attributes.position,col=[];const inner=new THREE.Color(0x7fe6d6),outer=new THREE.Color(0x0f4a5e);
+const shoalGeo=makeRadial(R_SAND-1.5,R_SAND+12.0,12,130);
+{const p=shoalGeo.attributes.position,col=[];const inner=new THREE.Color(0x9ff0df),outer=new THREE.Color(0x1f86a0);
  for(let i=0;i<p.count;i++){const r=Math.hypot(p.getX(i),p.getZ(i));
    const t=Math.max(0,Math.min(1,(r-(R_SAND-1.0))/5.0));const c=inner.clone().lerp(outer,t);col.push(c.r,c.g,c.b);}
  shoalGeo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));}
-const shoal=new THREE.Mesh(shoalGeo,new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:0.7,depthWrite:false}));
+const shoal=new THREE.Mesh(shoalGeo,new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:0.9,depthWrite:false}));
 shoal.position.y=-0.03;scene.add(shoal);
 
 /* shoreline foam ring */
@@ -940,7 +955,7 @@ function waterNormalsTex(){const c=document.createElement('canvas');c.width=c.he
 if(!isMobile&&THREE.Water&&THREE.Sky){try{
   WATER=new THREE.Water(new THREE.PlaneGeometry(2000,2000),{textureWidth:512,textureHeight:512,
     waterNormals:waterNormalsTex(),sunDirection:new THREE.Vector3(0,1,0),
-    sunColor:0xffffff,waterColor:0x123f52,distortionScale:2.6,fog:false});
+    sunColor:0xffffff,waterColor:0x1f8aa0,distortionScale:2.4,fog:false});
   WATER.rotation.x=-Math.PI/2;WATER.position.y=-0.05;scene.add(WATER);
   SKY=new THREE.Sky();SKY.scale.setScalar(10000);scene.add(SKY);
   const u=SKY.material.uniforms;u['turbidity'].value=8;u['rayleigh'].value=2.2;
@@ -1055,7 +1070,7 @@ function makeFrond(len,bend,tint){const grp=new THREE.Group();
   const leaves=new THREE.Mesh(lg,new THREE.MeshStandardMaterial({color:tint||0x4e8233,roughness:.7,side:THREE.DoubleSide}));
   leaves.castShadow=true;grp.add(leaves);return grp;}
 const crown=new THREE.Group();crown.position.copy(topPt);crown.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),topTan);palm.add(crown);
-const GREENS=[0x4e8233,0x568a37,0x46772d,0x5c9440,0x437028];
+const GREENS=[0x4c8a2a,0x579930,0x428024,0x60a838,0x3a7320];
 for(let i=0;i<18;i++){const az=(i/18)*Math.PI*2+(i%2?0.18:0)+(Math.random()-0.5)*0.12,tier=i%3;
   const basePitch=(tier===0?0.95:tier===1?0.55:0.14)+(Math.random()-0.5)*0.14;
   const len=2.7+(tier===0?0.4:tier===2?0.55:0)+(Math.random()*0.6-0.15);
@@ -1085,11 +1100,9 @@ function rugTex(name){
   function diamondRow(y){for(let x=150;x<=W-150;x+=58){g.save();g.translate(x,y);g.rotate(Math.PI/4);
     g.strokeStyle=gold;g.lineWidth=4;g.strokeRect(-15,-15,30,30);g.restore();}}
   diamondRow(150);diamondRow(H-150);
-  // small mihrab arch up top (kept clear of the name)
   g.strokeStyle=gold;g.lineWidth=12;g.beginPath();
   g.moveTo(300,470);g.lineTo(300,300);g.quadraticCurveTo(512,150,724,300);g.lineTo(724,470);g.stroke();
   g.fillStyle=gold;g.beginPath();g.arc(512,360,18,0,7);g.fill();
-  // BIG name — auto-fit, dark halo + gold edge + bright gold core (max contrast)
   g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';
   let fs=360;g.font='900 '+fs+'px Inter,Arial,sans-serif';
   while(g.measureText(name).width>W-210&&fs>140){fs-=8;g.font='900 '+fs+'px Inter,Arial,sans-serif';}
@@ -1139,7 +1152,7 @@ function recompute(){
     const hX=(islandH(pos.x+eps,pos.z)-islandH(pos.x-eps,pos.z))/(2*eps),
           hZ=(islandH(pos.x,pos.z+eps)-islandH(pos.x,pos.z-eps))/(2*eps);
     const up=new THREE.Vector3(0,1,0),nrm=new THREE.Vector3(-hX,1,-hZ).normalize();
-    it.o.g.position.set(pos.x,hy+0.12,pos.z);     // sit flush ON the slope (convex hill -> edges clear the sand)
+    it.o.g.position.set(pos.x,hy+0.12,pos.z);     // sit ON the slope, edges clear
     it.o.g.quaternion.setFromUnitVectors(up,nrm); // follow the slope so no edge digs into the sand
     it.o.g.rotateY(-it.az*D2R);});
   renderTimes();
@@ -1237,14 +1250,14 @@ function update(now){
   scene.fog.color.copy(sky);
   if(WATER){WATER.material.uniforms['time'].value+=dt;
     WATER.material.uniforms['sunDirection'].value.copy(dir).normalize();
-    WATER.material.uniforms['waterColor'].value.copy(C(0x123f52)).lerp(C(0x081d2c),nightAmt*0.7);}
+    WATER.material.uniforms['waterColor'].value.copy(C(0x1f8aa0)).lerp(C(0x06303a),nightAmt*0.7);}
   starMat.opacity=Math.max(0,nightAmt-0.15)*(1-weather.clouds*0.85);
   stars.rotation.y+=dt*0.005;
 
   // sand brightness + wet + moonlit night tint (vertex colors carry base sand color)
   const wet=weather.rain;
-  sandMat.color.copy(C(0xefdcab)).lerp(C(0x8b96b4),nightAmt*0.45).lerp(C(0x8a7e63),wet*0.25)
-    .multiplyScalar(0.72+0.34*dayAmt+nightAmt*0.32);
+  sandMat.color.copy(C(0xdcc088)).lerp(C(0x8b96b4),nightAmt*0.45).lerp(C(0x8a7e63),wet*0.25)
+    .multiplyScalar(0.80+0.26*dayAmt+nightAmt*0.30);
   sandMat.roughness=1-wet*0.4;
 
   // sea waves (only the simple sea; advanced Water animates itself)
@@ -1315,7 +1328,8 @@ el('nowBtn').onclick=()=>{useRealTime=true;playing=false;forceNight=false;el('ni
 el('playBtn').onclick=()=>{playing=!playing;useRealTime=false;lastFrame=performance.now();
   el('playBtn').classList.toggle('on',playing);el('playBtn').textContent=playing?'❚❚':'▶ День';};
 el('toggle').onclick=()=>el('panel').classList.toggle('min');
-addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+function onResize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);}
+addEventListener('resize',onResize);addEventListener('orientationchange',()=>setTimeout(onResize,250));
 
 
 /* ---- premium dock / rail wiring ---- */
