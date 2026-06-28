@@ -1707,24 +1707,24 @@
         background:rgba(16,22,36,.5);backdrop-filter:blur(10px);padding:5px 12px;border-radius:20px;z-index:10}
   @media(max-width:820px){
     .panel{width:auto;left:calc(8px + env(safe-area-inset-left));right:calc(8px + env(safe-area-inset-right));
-           top:calc(8px + env(safe-area-inset-top));max-height:48vh;padding:12px 12px 10px;border-radius:18px}
-    .panel.min{max-height:none;padding:11px 12px}
-    h1{font-size:13px}.clock{font-size:30px}.sub{font-size:11px}
+           top:calc(8px + env(safe-area-inset-top));max-height:46vh;padding:10px 11px 8px;border-radius:16px}
+    .panel.min{max-height:none;padding:9px 11px}
+    h1{font-size:13px}.clock{font-size:27px}.sub{font-size:10px}
     .ptime{padding:7px 6px;font-size:13px}
     select,input[type=date]{font-size:16px;min-height:38px}      /* 16px stops iOS zoom-on-focus */
     .rail{right:calc(8px + env(safe-area-inset-right));gap:8px}
-    .gbtn{width:42px;height:42px;font-size:16px}
+    .gbtn{width:38px;height:38px;font-size:15px}
     /* --- compact bottom dock --- */
     .dock{left:calc(8px + env(safe-area-inset-left));right:calc(8px + env(safe-area-inset-right));
-          transform:none;flex-direction:column;align-items:stretch;gap:7px;
-          bottom:calc(8px + env(safe-area-inset-bottom));padding:9px 11px;border-radius:16px}
+          transform:none;flex-direction:column;align-items:stretch;gap:5px;
+          bottom:calc(8px + env(safe-area-inset-bottom));padding:6px 10px;border-radius:13px}
     .dsep{display:none}.hint{display:none}
     .dgroup{justify-content:space-around;gap:10px;width:100%}
     .dgroup.col{flex-direction:row}                               /* toggles side-by-side */
-    .srow{min-width:0;flex:0 0 auto;gap:6px;font-size:11px}
-    .sw{transform:scale(.85);transform-origin:center}
-    .slrow{flex:1 1 0;gap:6px}.slrow .dlbl{font-size:10px}.slrow .ic{font-size:12px}
-    input[type=range]{height:22px}
+    .srow{min-width:0;flex:0 0 auto;gap:5px;font-size:10px}
+    .sw{transform:scale(.76);transform-origin:center}
+    .slrow{flex:1 1 0;gap:5px}.slrow .dlbl{font-size:9px}.slrow .ic{font-size:11px}
+    input[type=range]{height:18px}
   }
   @media(max-width:820px) and (orientation:landscape){
     .panel{max-height:80vh;width:230px;right:auto;padding:10px}
@@ -1778,7 +1778,7 @@
   </div>
   <div class="dsep"></div>
   <div class="dgroup">
-    <div class="slrow"><span class="ic">☀</span><input type="range" id="bright" min="60" max="160" value="108"><span class="dlbl">Яркость</span></div>
+    <div class="slrow"><span class="ic">☀</span><input type="range" id="bright" min="60" max="160" value="94"><span class="dlbl">Яркость</span></div>
     <div class="slrow"><span class="ic">🔊</span><input type="range" id="vol" min="0" max="100" value="40"><span class="dlbl">Громкость</span></div>
   </div>
   <div class="dsep"></div>
@@ -1883,7 +1883,7 @@ function perfGuard(now){ _pN++; if(now-_pT<2000)return;
     else if(_pLvl===2)renderer.setPixelRatio(1);
     else { renderer.shadowMap.enabled=false; if(typeof sun!=='undefined')sun.castShadow=false; } } }
 
-const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x10182a,0.012);
+const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x10182a,0.0045);
 const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,20000);
 /* ---------- cinematic post-processing: bloom + grade + correct sRGB ---------- */
 const USE_POST=(TIER!=='low')&&!!THREE.EffectComposer;
@@ -1893,9 +1893,9 @@ function renderFrame(){ if(composer&&_postEnabled)composer.render(); else render
   if(!USE_POST)return;
   composer=new THREE.EffectComposer(renderer);composer.setSize(innerWidth,innerHeight);
   composer.addPass(new THREE.RenderPass(scene,camera));
-  bloomPass=new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),0.55,0.4,0.88); // strength,radius,threshold
+  bloomPass=new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),0.3,0.4,0.9); // strength,radius,threshold
   composer.addPass(bloomPass);
-  const Grade={uniforms:{tDiffuse:{value:null},sat:{value:1.08}},
+  const Grade={uniforms:{tDiffuse:{value:null},sat:{value:1.2}},
     vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
     fragmentShader:'uniform sampler2D tDiffuse;uniform float sat;varying vec2 vUv;void main(){vec4 c=texture2D(tDiffuse,vUv);float l=dot(c.rgb,vec3(0.299,0.587,0.114));c.rgb=mix(vec3(l),c.rgb,sat);float d=length(vUv-0.5);c.rgb*=1.0-smoothstep(0.45,0.82,d)*0.26;gl_FragColor=c;}'};
   composer.addPass(new THREE.ShaderPass(Grade));
@@ -1948,7 +1948,7 @@ refreshEnv(1);
 const moon=new THREE.DirectionalLight(0xaecbff,0);scene.add(moon);scene.add(moon.target);
 
 /* ===================== GEOMETRY HELPERS ===================== */
-const R_SAND=20.0,R_ISLAND=38.0,R_SEA=50.0,R_RUG=13.0,TRUNK_H=5.6;
+const R_SAND=20.0,R_ISLAND=38.0,R_SEA=50.0,R_RUG=11.0,TRUNK_H=5.6;
 function makeRadial(rIn,rOut,rings,sectors){
   const pos=[],uv=[],idx=[];
   for(let i=0;i<=rings;i++){const tr=i/rings,r=rIn+(rOut-rIn)*tr;
@@ -2296,6 +2296,16 @@ function makeRug(name){
     if(y<0.35)continue;const s=0.10+Math.random()*0.18,p=new THREE.Mesh(new THREE.SphereGeometry(s,6,5),pebMat);
     p.position.set(x,y-s*0.3,z);p.scale.y=0.6;p.castShadow=true;p.receiveShadow=true;scene.add(p);}
 })();
+/* sundial "hand": a soft shadow streak from the palm to the active prayer's rug */
+function handTexture(){const c=document.createElement('canvas');c.width=64;c.height=256;const g=c.getContext('2d');
+  const lg=g.createLinearGradient(0,0,0,256);lg.addColorStop(0,'rgba(35,28,16,0)');lg.addColorStop(0.5,'rgba(35,28,16,0.9)');lg.addColorStop(1,'rgba(35,28,16,0)');
+  g.fillStyle=lg;g.fillRect(0,0,64,256);
+  const sg=g.createLinearGradient(0,0,64,0);sg.addColorStop(0,'rgba(0,0,0,0)');sg.addColorStop(0.5,'rgba(0,0,0,1)');sg.addColorStop(1,'rgba(0,0,0,0)');
+  g.globalCompositeOperation='destination-in';g.fillStyle=sg;g.fillRect(0,0,64,256);
+  return new THREE.CanvasTexture(c);}
+const handMesh=new THREE.Mesh(new THREE.PlaneGeometry(1.9,R_RUG),
+  new THREE.MeshBasicMaterial({map:handTexture(),transparent:true,opacity:0,depthWrite:false}));
+handMesh.rotation.x=-Math.PI/2;handMesh.renderOrder=2;scene.add(handMesh);
 const rugObjs={};
 PRAYERS.filter(p=>!p.sep).forEach(p=>{const r=makeRug(p.nm.toUpperCase());scene.add(r.grp);rugObjs[p.key]={g:r.grp,top:r.top};});
 
@@ -2319,7 +2329,7 @@ function recompute(){
     const{az}=sunAltAz(t,loc.lat,decl,EqT,loc.lon,loc.tz);items.push({az:((az+180)%360+360)%360,o});});
   items.sort((a,b)=>a.az-b.az);
   for(let it=0;it<80;it++){for(let i=0;i<items.length;i++){const j=(i+1)%items.length;
-    let gap=items[j].az-items[i].az;if(j===0)gap+=360;if(gap<40){const pu=(40-gap)/2;
+    let gap=items[j].az-items[i].az;if(j===0)gap+=360;if(gap<20){const pu=(20-gap)/2;
       items[i].az=(items[i].az-pu+360)%360;items[j].az=(items[j].az+pu)%360;}}items.sort((a,b)=>a.az-b.az);}
   items.forEach(it=>{const pos=azToPos(it.az,R_RUG),hy=islandH(pos.x,pos.z),eps=0.35;
     const hX=(islandH(pos.x+eps,pos.z)-islandH(pos.x-eps,pos.z))/(2*eps),
@@ -2393,8 +2403,8 @@ function update(now){
   const dayAmt=Math.max(0,Math.min(1,(alt+2)/12)),nightAmt=1-dayAmt;
   sunGlow.position.copy(sunDisc.position);
   sunGlow.material.opacity=(alt>-2?Math.min(0.9,0.3+dayAmt):0)*(1-weather.clouds*0.6);
-  sun.castShadow=alt>0.5;sun.intensity=(0.25+2.0*dayAmt)*(1-weather.clouds*0.6);
-  hemi.intensity=(0.30+0.36*dayAmt)*(1-weather.clouds*0.3);
+  sun.castShadow=alt>0.5;sun.intensity=(0.22+1.7*dayAmt)*(1-weather.clouds*0.6);
+  hemi.intensity=(0.24+0.26*dayAmt)*(1-weather.clouds*0.3);
 
   // moon high & far, opposite-ish the sun (atmospheric perspective)
   const maz=(az+180)%360,malt=52;
@@ -2410,6 +2420,11 @@ function update(now){
     glintMat.opacity=Math.min(0.5,0.12+dayAmt*0.35)*(1-weather.clouds*0.7);}
   else{glintG.rotation.y=-maz*D2R;glintMat.color.setHex(0xdce8ff);
     glintMat.opacity=Math.min(0.75,nightAmt*0.6)*(1-weather.clouds*0.7);}
+  {const shAz=(az+180)%360,rMid=R_RUG*0.5;                 // sundial hand follows the sun's shadow
+   const hx=Math.sin(shAz*D2R)*rMid,hz=-Math.cos(shAz*D2R)*rMid;
+   handMesh.position.set(hx,islandH(hx,hz)+0.06,hz);
+   handMesh.rotation.set(-Math.PI/2,0,0);handMesh.rotateY(-shAz*D2R);
+   handMesh.material.opacity=Math.max(0,dayAmt)*0.45;}
 
   // foam wash + star reflections
   foam.material.map.offset.x+=dt*0.05;foam.material.opacity=0.42+0.26*Math.sin(now*0.0018);
@@ -2429,9 +2444,9 @@ function update(now){
 
   // sand brightness + wet + moonlit night tint (vertex colors carry base sand color)
   const wet=weather.rain;
-  sandMat.color.copy(C(0xdcc088)).lerp(C(0x6e5a36),nightAmt*0.45).lerp(C(0x8a7e63),wet*0.25)
-    .multiplyScalar(0.80+0.26*dayAmt+nightAmt*0.30);
-  warmGlow.intensity=nightAmt*1.5;refreshEnv(dayAmt);  // cozy warm glow + sky IBL
+  sandMat.color.copy(C(0xd0b478)).lerp(C(0x6e5a36),nightAmt*0.45).lerp(C(0x8a7e63),wet*0.25)
+    .multiplyScalar(0.72+0.20*dayAmt+nightAmt*0.28);
+  warmGlow.intensity=nightAmt*1.5;refreshEnv(dayAmt);if(bloomPass)bloomPass.strength=0.12+nightAmt*0.55;  // bloom mostly at night
   sandMat.roughness=1-wet*0.4;
 
   // sea waves (only the simple sea; advanced Water animates itself)
