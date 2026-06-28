@@ -1058,25 +1058,46 @@ function makeFrond(len,bend,tint){const grp=new THREE.Group();
     new THREE.Vector3(len*0.62,len*0.18,bz*0.7),new THREE.Vector3(len*0.85,len*0.02,bz),new THREE.Vector3(len,-len*0.24,bz*1.35)]);
   const rachis=new THREE.Mesh(taperedTube(arch,22,5,t=>0.05*(1-0.8*t)),new THREE.MeshStandardMaterial({color:0x53631f,roughness:.85}));
   rachis.castShadow=true;grp.add(rachis);
-  const pos=[],idx=[];let v=0;const NL=26,UP=new THREE.Vector3(0,1,0);
+  const pos=[],col=[],idx=[];let v=0;const NL=34,UP=new THREE.Vector3(0,1,0);
+  const baseColor=new THREE.Color(tint||0x5c8c3e);
   for(let k=2;k<NL;k++){const t=k/NL,P=arch.getPointAt(t),T=arch.getTangentAt(t).normalize();
-    const leafLen=(1-0.55*t)*len*0.27,w=leafLen*0.15,pitch=0.6-0.28*t;
+    const leafLen=(1-0.55*t)*len*0.27,w=leafLen*0.19,pitch=0.6-0.28*t;
     for(const side of[-1,1]){const S=new THREE.Vector3(0,0,side);
       const dir=new THREE.Vector3().addScaledVector(S,Math.cos(pitch)).addScaledVector(UP,Math.sin(pitch)).addScaledVector(T,0.4).normalize();
       let zc=T.clone().addScaledVector(dir,-T.dot(dir));if(zc.lengthSq()<1e-5)zc.set(0,0,1);zc.normalize();
       const bl=P.clone().addScaledVector(zc,-w/2),br=P.clone().addScaledVector(zc,w/2),tp=P.clone().addScaledVector(dir,leafLen);
-      tp.y-=leafLen*0.14;pos.push(bl.x,bl.y,bl.z,br.x,br.y,br.z,tp.x,tp.y,tp.z);idx.push(v,v+1,v+2);v+=3;}}
-  const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));lg.setIndex(idx);lg.computeVertexNormals();
-  const leaves=new THREE.Mesh(lg,new THREE.MeshStandardMaterial({color:tint||0x4e8233,roughness:.7,side:THREE.DoubleSide}));
+      tp.y-=leafLen*0.14;pos.push(bl.x,bl.y,bl.z,br.x,br.y,br.z,tp.x,tp.y,tp.z);idx.push(v,v+1,v+2);v+=3;
+      // natural per-leaflet colour: gentle random jitter around the base tint, lighter/thinner-looking tip (subtle translucency)
+      const jc=baseColor.clone().offsetHSL((Math.random()-0.5)*0.014,(Math.random())*0.05,(Math.random()-0.5)*0.05+t*0.03);
+      const tc=jc.clone().offsetHSL(0.01,-0.06,0.12);
+      col.push(jc.r,jc.g,jc.b,0.96, jc.r,jc.g,jc.b,0.96, tc.r,tc.g,tc.b,0.45);}}
+  const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  lg.setAttribute('color',new THREE.Float32BufferAttribute(col,4));lg.setIndex(idx);lg.computeVertexNormals();
+  const leaves=new THREE.Mesh(lg,new THREE.MeshPhysicalMaterial({vertexColors:true,color:0xffffff,transparent:true,
+    opacity:1,roughness:0.5,clearcoat:0.22,clearcoatRoughness:0.4,side:THREE.DoubleSide}));
   leaves.castShadow=true;grp.add(leaves);return grp;}
 const crown=new THREE.Group();crown.position.copy(topPt);crown.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),topTan);palm.add(crown);
-const GREENS=[0x4c8a2a,0x579930,0x428024,0x60a838,0x3a7320];
-for(let i=0;i<18;i++){const az=(i/18)*Math.PI*2+(i%2?0.18:0)+(Math.random()-0.5)*0.12,tier=i%3;
-  const basePitch=(tier===0?0.95:tier===1?0.55:0.14)+(Math.random()-0.5)*0.14;
-  const len=2.7+(tier===0?0.4:tier===2?0.55:0)+(Math.random()*0.6-0.15);
+const GREEN_LIGHT=[0x7fc24a,0x8ccc52,0x6fb83e];   // young, vivid, sunlit shoots
+const GREEN_MAIN=[0x2f8a22,0x358f28,0x3f9b2e,0x4aa83a]; // rich, saturated healthy fronds
+const GREEN_SHADE=[0x1f5e18,0x256b1e,0x2a7a22];   // lower fronds, still vivid but in shadow
+function pickGreen(tier){const r=Math.random();let pool;
+  if(tier<=1)pool=r<0.55?GREEN_LIGHT:GREEN_MAIN;
+  else if(tier===2)pool=r<0.12?GREEN_LIGHT:(r<0.86?GREEN_MAIN:GREEN_SHADE);
+  else pool=r<0.6?GREEN_SHADE:GREEN_MAIN;
+  return pool[Math.floor(Math.random()*pool.length)];}
+const FROND_N=isMobile?32:44;
+const PITCH_T=[0.98,0.70,0.42,0.12],LEN_T=[0.35,0.15,0,0.55];
+for(let i=0;i<FROND_N;i++){const az=(i/FROND_N)*Math.PI*2+(i%2?0.15:0)+(Math.random()-0.5)*0.12,tier=i%4;
+  const basePitch=PITCH_T[tier]+(Math.random()-0.5)*0.16;
+  const len=2.7+LEN_T[tier]+(Math.random()*0.6-0.15);
   const azG=new THREE.Group();azG.rotation.y=az;crown.add(azG);
   const pitchG=new THREE.Group();pitchG.rotation.z=basePitch;pitchG.rotation.y=(Math.random()-0.5)*0.22;azG.add(pitchG);
-  pitchG.add(makeFrond(len,(Math.random()-0.5)*1.4,GREENS[i%GREENS.length]));}
+  pitchG.add(makeFrond(len,(Math.random()-0.5)*1.4,pickGreen(tier)));}
+// young upright "spear" shoots filling the very heart of the crown — gives that full, lush look from any angle
+for(let s=0;s<7;s++){const az=(s/7)*Math.PI*2+0.3+(Math.random()-0.5)*0.3;
+  const azG=new THREE.Group();azG.rotation.y=az;crown.add(azG);
+  const pitchG=new THREE.Group();pitchG.rotation.z=1.22+(Math.random()-0.5)*0.12;pitchG.rotation.y=(Math.random()-0.5)*0.18;azG.add(pitchG);
+  pitchG.add(makeFrond(1.05+Math.random()*0.35,(Math.random()-0.5)*0.5,GREEN_LIGHT[Math.floor(Math.random()*GREEN_LIGHT.length)]));}
 for(let d=0;d<3;d++){const az=d/3*Math.PI*2+0.6;
   const bse=topPt.clone().add(new THREE.Vector3(Math.cos(az)*0.32,-0.12,Math.sin(az)*0.32));
   const dm=new THREE.MeshStandardMaterial({color:0xc07a32,roughness:.6});
