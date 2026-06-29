@@ -1873,15 +1873,17 @@ const _weak=isMobile&&(_cores<=4||_mem<=3);
 const TIER=isMobile?(_weak?'low':'mid'):'high';
 const GFX=({low:{shadow:512,radius:1,fronds:18,particles:300,pr:1},
             mid:{shadow:1024,radius:2,fronds:28,particles:700,pr:Math.min(devicePixelRatio,1.5)},
-            high:{shadow:4096,radius:4,fronds:40,particles:1800,pr:Math.min(devicePixelRatio,2)}})[TIER];
+            high:{shadow:2048,radius:3,fronds:40,particles:1400,pr:Math.min(devicePixelRatio,2)}})[TIER];
 renderer.setPixelRatio(GFX.pr);
 let _pT=performance.now(),_pN=0,_pLvl=0,_postEnabled=true;
 function perfGuard(now){ _pN++; if(now-_pT<2000)return;
   const fps=_pN*1000/(now-_pT); _pT=now; _pN=0;
   if(fps<26&&_pLvl<3){ _pLvl++;
-    if(_pLvl===1)_postEnabled=false;                  // drop bloom first (biggest win)
-    else if(_pLvl===2)renderer.setPixelRatio(1);
-    else { renderer.shadowMap.enabled=false; if(typeof sun!=='undefined')sun.castShadow=false; } } }
+    if(_pLvl===1)_postEnabled=false;                  // 1) drop bloom (biggest win)
+    else if(_pLvl===2)renderer.setPixelRatio(1);      // 2) lower pixel ratio
+    else if(typeof sun!=='undefined'&&sun.shadow){    // 3) smaller shadow map — but KEEP shadows on
+      sun.shadow.mapSize.set(1024,1024);
+      if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;} } } }
 
 const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x10182a,0.0045);
 const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,20000);
@@ -1926,7 +1928,7 @@ canvas.addEventListener('touchend',e=>{if(e.touches.length===0)drag=false;
 const hemi=new THREE.HemisphereLight(0xeae6dc,0x6b5a3a,0.5);scene.add(hemi);
 const warmGlow=new THREE.PointLight(0xffb45a,0,60,2.0);warmGlow.position.set(0,5,4);scene.add(warmGlow);
 const sun=new THREE.DirectionalLight(0xfff2da,1.8);sun.castShadow=true;
-sun.shadow.mapSize.set(GFX.shadow,GFX.shadow);sun.shadow.radius=GFX.radius;
+sun.shadow.mapSize.set(GFX.shadow,GFX.shadow);sun.shadow.radius=Math.max(1,GFX.radius-2);
 const sc=sun.shadow.camera;sc.near=1;sc.far=260;sc.left=-30;sc.right=30;sc.top=30;sc.bottom=-30;
 sun.shadow.bias=-0.0004;sun.shadow.normalBias=0.03;scene.add(sun);scene.add(sun.target);
 /* ---------- IBL environment: sky-tinted reflections + ambient (UE5-style) ---------- */
@@ -2040,6 +2042,7 @@ const sandGeo=makeRadial(0,R_ISLAND,190,170);
  sandGeo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));sandGeo.computeVertexNormals();}
 const sandMat=new THREE.MeshStandardMaterial({map:sandTex,normalMap:sandNorm,normalScale:new THREE.Vector2(1.0,1.0),
   roughnessMap:sandRough,vertexColors:true,color:0xffffff,roughness:1,metalness:0,side:THREE.DoubleSide});
+sandMat.envMapIntensity=0.4;
 const sand=new THREE.Mesh(sandGeo,sandMat);sand.receiveShadow=true;sand.castShadow=true;scene.add(sand);
 
 /* ===================== SEA ===================== */
@@ -2403,7 +2406,7 @@ function update(now){
   const dayAmt=Math.max(0,Math.min(1,(alt+2)/12)),nightAmt=1-dayAmt;
   sunGlow.position.copy(sunDisc.position);
   sunGlow.material.opacity=(alt>-2?Math.min(0.9,0.3+dayAmt):0)*(1-weather.clouds*0.6);
-  sun.castShadow=alt>0.5;sun.intensity=(0.22+1.7*dayAmt)*(1-weather.clouds*0.6);
+  sun.castShadow=alt>0.2;sun.intensity=(0.25+2.1*dayAmt)*(1-weather.clouds*0.3);
   hemi.intensity=(0.24+0.26*dayAmt)*(1-weather.clouds*0.3);
 
   // moon high & far, opposite-ish the sun (atmospheric perspective)
@@ -2420,11 +2423,14 @@ function update(now){
     glintMat.opacity=Math.min(0.5,0.12+dayAmt*0.35)*(1-weather.clouds*0.7);}
   else{glintG.rotation.y=-maz*D2R;glintMat.color.setHex(0xdce8ff);
     glintMat.opacity=Math.min(0.75,nightAmt*0.6)*(1-weather.clouds*0.7);}
-  {const shAz=(az+180)%360,rMid=R_RUG*0.5;                 // sundial hand follows the sun's shadow
-   const hx=Math.sin(shAz*D2R)*rMid,hz=-Math.cos(shAz*D2R)*rMid;
-   handMesh.position.set(hx,islandH(hx,hz)+0.06,hz);
-   handMesh.rotation.set(-Math.PI/2,0,0);handMesh.rotateY(-shAz*D2R);
-   handMesh.material.opacity=Math.max(0,dayAmt)*0.45;}
+  {const sunUp=alt>0.2;                                    // palm-shadow sundial: follows the SUN
+   if(sunUp){const shAz=(az+180)%360,rMid=R_RUG*0.5;       // shadow points opposite the sun, out to the rug ring
+     const hx=Math.sin(shAz*D2R)*rMid,hz=-Math.cos(shAz*D2R)*rMid;
+     handMesh.visible=true;handMesh.position.set(hx,islandH(hx,hz)+0.05,hz);
+     handMesh.scale.set(1.2,1,1);
+     handMesh.rotation.set(-Math.PI/2,0,0);handMesh.rotateY(-shAz*D2R);
+     handMesh.material.opacity=Math.min(0.62,0.32+dayAmt*0.4);}
+   else handMesh.visible=false;}
 
   // foam wash + star reflections
   foam.material.map.offset.x+=dt*0.05;foam.material.opacity=0.42+0.26*Math.sin(now*0.0018);
@@ -2485,8 +2491,8 @@ function update(now){
   // active prayer highlight (brighten its gold; keep all names readable)
   const active=activePrayer(t);
   Object.entries(rugObjs).forEach(([k,o])=>{const on=k===active;
-    o.top.material.emissiveIntensity=on?1.5:1.0;
-    o.g.scale.setScalar(on?1.06:1.0);});
+    o.top.material.emissiveIntensity=on?1.9:0.95;
+    o.g.scale.setScalar(on?1.12:1.0);});
 
   // readouts
   el('clockT').textContent=fmt(t);
